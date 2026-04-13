@@ -1,2 +1,5 @@
 .claude/*.local.md
 .superpowers/
+
+# Agent fork-join session files (auto-added)
+.fork-join/
