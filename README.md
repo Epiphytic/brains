@@ -38,12 +38,24 @@ Each phase chains into the next via a user-approval gate. The `nurture` and `sec
 
 ## Installation
 
-```bash
-# Load directly
-claude --plugin-dir /path/to/brains
+**From GitHub:**
 
-# Or add to a project's plugin config
-echo '{ "plugins": ["/path/to/brains"] }' > .claude/plugins.json
+```bash
+# 1. Register the marketplace (one-time)
+claude plugin marketplace add --github Epiphytic/brains
+
+# 2. Install the plugin
+claude plugin install brains@brains-marketplace
+```
+
+**From a local clone:**
+
+```bash
+# 1. Register the marketplace (one-time)
+claude plugin marketplace add /path/to/brains
+
+# 2. Install the plugin
+claude plugin install brains@brains-marketplace
 ```
 
 After installing, run `/brains:setup --global` to install dependencies and configure LLM providers, then `/brains:setup --local` in each project for project-specific settings.
