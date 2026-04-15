@@ -1,8 +1,8 @@
 ---
 name: nurture
-description: This skill should be used when the user asks to "nurture", "review and fix", "improve code quality", "add tests", "fix remaining bugs", "polish the implementation", "check for completeness", or invokes "/brains:nurture". Reviews implementation for completeness, then fixes issues including bugs, missing features, and lack of tests. Supports --single (default), --parallel, and --debate modes for the review phase.
+description: This skill should be used when the user asks to "nurture", "review and fix", "improve code quality", "add tests", "fix remaining bugs", "polish the implementation", "check for completeness", or invokes "/brains:nurture". Reviews implementation for completeness, then fixes issues including bugs, missing features, and lack of tests. Supports --single (default), --parallel, and --debate modes for the review phase. When invoked by a phase-3 teammate with --scope phase-N, scopes the review to changes in that plan-phase, commits code and updates .gitignore, reflects any half-complete state in docs, and files follow-up beads tasks for the next phase or cleanup.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [scope]"
+argument-hint: "[--single|--parallel|--debate] [--scope phase-N | all] [paths...]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent
 ---
 
@@ -27,13 +27,20 @@ Modes apply to the **review** phase. Fixing always happens locally.
 
 For `--parallel` and `--debate`, read and follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
 
+## Scope
+
+The `--scope` flag controls what nurture reviews:
+
+- `--scope phase-N` — review only files touched in the current plan-phase (use `git log --since` or the teammate's known commit range). File follow-up beads tasks labelled `brains:phase-<N+1>` if a next phase exists, else `brains:cleanup`. Invoked by phase-3 teammates.
+- `--scope all` (default when invoked standalone) — review all recent changes per the classic behavior.
+
 ## Process
 
 ### 1. Gather Context
 
 Identify what to review:
 
-- **BRAINS outputs**: Check `docs/plans/` for storm, research, architect, and implement specs
+- **BRAINS outputs**: Check `docs/plans/` for research docs, ADRs (`docs/adr/`), and map/implement specs
 - **Recent changes**: `git log --oneline -20` and `git diff main...HEAD --stat` to scope what was built
 - **User scope**: If the user specified a scope, focus on those files/modules
 - **Test coverage**: Check for existing test files, coverage reports
@@ -102,6 +109,21 @@ Consolidate all findings into a prioritized list:
 
 Present the list to the user. Get approval before fixing.
 
+## Commit and .gitignore responsibilities (phase-3 teammate scope only)
+
+When invoked with `--scope phase-N`, nurture MUST also:
+
+1. **Ensure code is committed.** Run `git status --porcelain`. If there are uncommitted changes, commit them atomically using conventional-commit messages. Group changes by conceptual unit; do not lump unrelated changes.
+
+2. **Update `.gitignore`.** Identify files that should not be tracked:
+   - Build artifacts (dist/, build/, target/, node_modules/, __pycache__/)
+   - Secret or local-only configs (.env*, credentials.json, settings.local.json)
+   - BRAINS runtime artifacts (docs/plans/.state/)
+
+   Add any missing patterns to `.gitignore`. Commit.
+
+3. **Reflect half-complete state in docs (if phase ended early).** If the teammate is running nurture during a pause/timeout, explicitly document in the nurture report which tasks are complete, which are in-progress, and which are blocked. Update any user-facing docs (README, architecture docs) affected by partial work to flag the incomplete state.
+
 ### 5. Fix Issues
 
 Work through the issue list in priority order:
@@ -153,6 +175,13 @@ If significant changes were made, update the implementation plan or create a nur
 ```
 
 Write to `docs/plans/YYYY-MM-DD-<topic>-nurture.md` if a report is warranted. Commit to git.
+
+When invoked with `--scope phase-N`, additionally:
+
+- Report file: `docs/plans/<slug>-phase-<N>-nurture.md`
+- Follow-up tasks filed to beads with label `brains:phase-<N+1>` (if next phase exists) or `brains:cleanup`.
+
+Close the `Nurture: phase <N>` umbrella task on completion.
 
 ## Phase Transition
 
