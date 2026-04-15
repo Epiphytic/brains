@@ -1,170 +1,158 @@
 ---
 name: brains
-description: This skill should be used when the user asks to "run the full pipeline", "do the full brains", "brains workflow", "start to finish", "build this from scratch", "full development workflow", "plan and implement everything", or invokes "/brains:brains". Orchestrates all six BRAINS phases in succession — Brainstorm, Research, Architect, Implement, Nurture, Secure. Each phase builds on the previous phase's output.
+description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes. Chains into /brains:map at the user gate.
 user-invocable: true
 argument-hint: "[--single|--parallel|--debate] [--rounds N] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, WebFetch, WebSearch, TaskCreate, TaskUpdate
 ---
 
-# BRAINS: Full Pipeline Orchestrator
+# BRAINS Phase 1: Interactive Architecture Loop
 
-Run all six phases in succession: **B**rainstorm → **R**esearch → **A**rchitect → **I**mplement → **N**urture → **S**ecure. Each phase builds on the outputs of prior phases, with user gates between each.
+Drive a user prompt through initial research, a 2-4 question interactive questionnaire, and an ADR with RFC 2119 requirements. Default mode: `--parallel` with star-chamber review.
 
 Set the plugin base path:
+
 ```bash
 BRAINS_PATH="<base directory from header>/../.."
 ```
 
 ## Mode Behavior
 
-The mode flag applies as the default for all phases. Individual phases can be overridden at transition points if the user requests.
+| Mode | Question generation | Architecture review |
+|---|---|---|
+| `--single` | Subagent only | Subagent only |
+| `--parallel` (default) | Subagent + star-chamber; merge and de-duplicate | Star-chamber reviews after synthesis |
+| `--debate` | Subagent + star-chamber debate across rounds | Star-chamber debates across rounds |
 
-| Flag | Effect |
-|------|--------|
-| `--single` | All phases run in single LLM mode |
-| `--parallel` | All phases use parallel mode (storm default) |
-| `--debate` | All phases use debate mode |
-| (no flag) | Each phase uses its own default mode |
+For `--parallel` and `--debate`, read and follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
 
-## Pipeline Flow
+## Hard Gate
 
-```
-Storm (brainstorm)
-  ↓ user gate
-Research
-  ↓ user gate
-Architect
-  ↓ user gate
-Implement → [launches separate session]
-  ↓ (in implementation plan)
-Nurture
-  ↓ (in implementation plan)
-Secure
-```
-
-**Phases 1-4** (Storm through Implement) run in the current session with user gates between each.
-
-**Phases 5-6** (Nurture and Secure) are embedded as the final tasks in the implementation plan and run in the implementation session. This is by design — nurture and secure need to operate on the actual code with a fresh context window.
+Do NOT chain into `/brains:map` until an ADR has been written and the user has accepted it.
 
 ## Process
 
-### 1. Initialize
+### 1. Parse arguments and derive topic
 
-Create tasks to track the pipeline:
+Parse `--single` / `--parallel` / `--debate`, `--rounds N`, and the topic string. If no topic is provided, ask the user.
 
-```
-- [ ] Storm: brainstorm and design
-- [ ] Research: investigate and validate
-- [ ] Architect: design architecture and record decisions
-- [ ] Implement: plan, create tasks, and launch session
-- [ ] (Nurture and Secure run as part of implementation)
-```
+### 2. Initial research (subagent)
 
-Parse the topic from arguments. If no topic is provided, ask the user.
+Spawn a research subagent scoped to the user's prompt. Use `Agent` with `subagent_type=feature-dev:code-explorer` when the prompt involves existing code; otherwise use a generic research agent. The subagent prompt MUST instruct it to produce:
+- Current stable versions of relevant libraries (SHOULD-level provenance, not a lock)
+- Deprecated APIs to avoid
+- Idiomatic patterns in the codebase or ecosystem
+- Prior art (blog posts, reference implementations)
 
-### 2. Storm Phase
+Output path: `docs/plans/YYYY-MM-DD-<slug>-research.md` (committed to git).
 
-Invoke the storm skill workflow. Follow the full process documented in `$BRAINS_PATH/skills/storm/SKILL.md`:
+If a research document from the same slug already exists and is younger than 24h, skip this step and reuse it.
 
-- Apply the pipeline's mode flag (or storm's default: `--parallel`)
-- Complete all storm checklist items
-- Write spec to `docs/plans/`
-- Get user approval
+### 3. Question generation (mode-dependent)
 
-**User gate:** After storm completes, ask:
-> "Storm phase complete. Spec at `<path>`. Ready to move to research, or want to revise?"
+You are aiming for generally 2-4 questions, each with explicit pros and cons, informed by the user's prompt and the research document from step 2. Each question should frame a real architectural choice — not a preference poll. Write pros and cons that would survive adversarial review.
 
-### 3. Research Phase
+Mode-specific procedure:
 
-Invoke the research skill workflow. Follow `$BRAINS_PATH/skills/research/SKILL.md`:
+- **`--single`:** spawn a single subagent and instruct it to generate the 2-4 question set with pros and cons. Use its output directly.
+- **`--parallel` (default):** spawn the subagent as in `--single` and concurrently invoke the star-chamber to produce its own candidate question set. Follow the parallel-mode protocol in `$BRAINS_PATH/references/multi-llm-protocol.md`. After both return, merge the two sets: de-duplicate semantically equivalent questions (not just string matches), keep the strongest framing and pro/con pairing for each, and drop questions that are strictly weaker variants.
+- **`--debate`:** spawn the subagent and star-chamber and run them across `--rounds N` (default 2) or until convergence, following the debate protocol in `$BRAINS_PATH/references/multi-llm-protocol.md`. Each round, both sides see the other's questions and critique / revise. Stop early if both sides converge on the same set.
 
-- Use the storm spec to derive research questions
-- Apply the pipeline's mode flag (or research's default: `--single`)
-- Complete investigation and write report
-- Get user approval
+Present the final question set to the user before starting the questionnaire so they can reject or reorder.
 
-**User gate:** After research completes, ask:
-> "Research complete. Report at `<path>`. Ready for architecture, or need more investigation?"
+### 4. Offer visual companion (own message)
 
-### 4. Architect Phase
+If any anticipated question would be clearer with a visual (layout comparison, state-machine mockup, component diagram), offer the browser-based visual companion in its own message. See `$BRAINS_PATH/skills/brains/references/visual-companion.md` for the detailed guide. This is a per-question tool, not a mode — accept once, then decide per-question whether to use terminal or browser.
 
-Invoke the architect skill workflow. Follow `$BRAINS_PATH/skills/architect/SKILL.md`:
+Offer prompt:
+> "Some of what we're working on might be easier to explain if I can show it to you in a web browser. I can put together mockups, diagrams, comparisons, and other visuals as we go. This feature is still new and can be token-intensive. Want to try it? (Requires opening a local URL)"
 
-- Use storm spec and research report as inputs
-- Apply the pipeline's mode flag (or architect's default: `--single`)
-- Create ADRs and architecture design
-- Get user approval
+### 5. Interactive questionnaire
 
-**User gate:** After architect completes, ask:
-> "Architecture complete. Design at `<path>`, ADRs in `docs/adr/`. Ready to implement?"
+For each generated question:
+1. Present the question with pros and cons.
+2. Accept the user's answer.
+3. Adapt the remaining question set based on new information.
+4. If an answer (a) contradicts a research finding, (b) introduces a new architectural dimension, or (c) renders remaining questions interdependent in unforeseen ways: re-engage the star-chamber for question review; optionally spawn a fresh research subagent for the new dimension.
 
-### 5. Implement Phase
+### 6. Architecture synthesis
 
-Invoke the implement skill workflow. Follow `$BRAINS_PATH/skills/implement/SKILL.md`:
+Produce the full architecture with up-to-date standards. Version specification is SHOULD-level — prefer MAJOR.MINOR for semver libraries; use the library's native scheme for non-semver.
 
-- Use all prior phase outputs as inputs
-- Apply the pipeline's mode flag for plan review (or implement's default: `--single`)
-- Create the implementation plan with **Nurture and Secure as final tasks**
-- Create beads tasks (or TaskCreate/TaskUpdate tasks)
-- Launch the implementation session in tmux
+### 7. Architecture review (mode-dependent)
 
-The implementation plan's final tasks should read:
+The review pass sits between synthesis and ADR generation. What happens here depends on the mode:
+
+- **`--single`:** skip review entirely. Present the synthesized architecture directly to the user for the gate in step 9.
+- **`--parallel` (default):** invoke the star-chamber to review the synthesized architecture, following the parallel-mode protocol in `$BRAINS_PATH/references/multi-llm-protocol.md`. Collect feedback across categories (soundness, version choices, missing concerns, testability). Present the feedback to the user alongside your recommendation and integrate accepted items into the architecture before writing the ADR.
+- **`--debate`:** run the star-chamber in debate mode across `--rounds N` (default 2) or until convergence, following the debate protocol in `$BRAINS_PATH/references/multi-llm-protocol.md`. Providers see each other's critiques and respond. Integrate the converged feedback (with user approval on contested items) before writing the ADR.
+
+### 8. ADR generation
+
+Produce one or more ADRs in `docs/adr/`. Filename format: `YYYY-MM-DD-NNN-<title>.md` where NNN is a globally sequential number (check `docs/adr/` for the next available number).
+
+ADR structure:
 
 ```markdown
-### Phase N-1: Nurture
-- [ ] Run /brains:nurture [--mode] — review implementation, fix bugs, add missing tests
+# ADR-NNN: <Title>
 
-### Phase N: Secure
-- [ ] Run /brains:secure [--mode] — security review and hardening
+**Date:** YYYY-MM-DD
+**Status:** Accepted
+**Decision makers:** <user + providers consulted>
+
+## Context
+<Why this decision is needed>
+
+## Decision
+<Prose summary of what was decided — the high-level choice and its shape>
+
+## Requirements (RFC 2119)
+<Testable MUST/SHOULD/MAY statements derived from the decision>
+- The system MUST <requirement>.
+- The system SHOULD <requirement>.
+- The system MAY <requirement>.
+
+## Rationale
+<Why this option over alternatives>
+
+## Alternatives Considered
+### <Alternative 1>
+- Pros: ...
+- Cons: ...
+- Why rejected: ...
+
+## Assumed Versions (SHOULD)
+- <framework/lib>: X.Y — in whatever versioning scheme the library uses
+- <api>: X.Y
+
+## Diagram
+<mermaid block, if warranted: ≥3 components with ≥2 relationships, or ≥1 state machine>
+
+## Consequences
+<What changes as a result>
+
+## Council Input
+<Summary of star-chamber feedback, when applicable>
 ```
 
-Where `[--mode]` matches the pipeline's mode flag if one was specified.
+Use RFC 2119 MUST/MUST NOT/SHOULD/SHOULD NOT/MAY language in the Requirements section. Include a mermaid diagram if the ADR has three or more components with two or more relationships, or at least one state machine.
 
-### 6. Handoff
+### 9. User gate
 
-After the implementation session is launched:
+Present the ADR(s) to the user. Options:
 
-> "BRAINS pipeline phases 1-4 complete. Implementation session launched.
->
-> The implementation plan includes nurture (phase 5) and secure (phase 6) as final tasks.
-> They will run automatically after implementation completes.
->
-> Phase outputs in `docs/plans/`:
-> - `<storm-spec>`
-> - `<research-report>`
-> - `<architecture-design>`
-> - `<implementation-plan>`
->
-> ADRs in `docs/adr/`:
-> - `<adr-list>`
->
-> This session is available for questions or oversight."
+- **Accept:** ask "Implement this ADR? [y/n]" — on yes, chain into `/brains:map` with the same mode flag.
+- **Reject:** collect the rejection reason as free-form text. Loop back to step 3 with the rejected ADR and rejection reason added to question-generation context. Reuse the initial research document from step 2.
 
-## Skipping Phases
+## Phase Transition
 
-If the user wants to skip a phase:
+After the ADR is accepted and the user elects to implement:
 
-- **Skip storm**: Start from research or architect. Acceptable if the design is already clear.
-- **Skip research**: Acceptable for well-understood domains. Flag the risk.
-- **Skip individual phases**: Adjust the pipeline. Always warn about what's being skipped.
-- **Never skip nurture or secure**: These are embedded in the implementation plan and should always run.
+> "Phase 1 complete. ADR(s) committed to `docs/adr/`. Chaining into phase 2 (`/brains:map`) with mode `<mode>`."
 
-## Resuming
-
-If the pipeline is interrupted (e.g., session ends mid-pipeline), resume from the last completed phase:
-
-- Check `docs/plans/` for existing phase outputs
-- Identify which phase completed last (by filename suffix: `-storm.md`, `-research.md`, `-architect.md`, `-implement.md`)
-- Resume from the next phase
-
-Tell the user what was found and confirm where to resume.
+Invoke `/brains:map` directly — do not wait for further user input.
 
 ## Additional Resources
 
 - **`$BRAINS_PATH/references/multi-llm-protocol.md`** — shared multi-LLM invocation protocol
-- **`$BRAINS_PATH/skills/storm/SKILL.md`** — storm phase details
-- **`$BRAINS_PATH/skills/research/SKILL.md`** — research phase details
-- **`$BRAINS_PATH/skills/architect/SKILL.md`** — architect phase details
-- **`$BRAINS_PATH/skills/implement/SKILL.md`** — implement phase details
-- **`$BRAINS_PATH/skills/nurture/SKILL.md`** — nurture phase details
-- **`$BRAINS_PATH/skills/secure/SKILL.md`** — secure phase details
+- **`$BRAINS_PATH/skills/brains/references/visual-companion.md`** — visual companion guide (browser-based mockups, diagrams, comparisons)
