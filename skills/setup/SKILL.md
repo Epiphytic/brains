@@ -230,7 +230,7 @@ Present the built-in defaults and let the user customize:
 | nurture | single | ? |
 | secure | single | ? |
 
-> "Would you like to change any defaults? Enter the skill name and mode (e.g., `research parallel`), or press enter to keep all defaults."
+> "Would you like to change any defaults? Enter the skill name and mode (e.g., `map parallel`), or press enter to keep all defaults."
 
 Also ask for default debate rounds:
 > "Default debate rounds (currently 2):"
