@@ -6,12 +6,11 @@ JSON file read by skills at invocation time via the Read tool. Contains system-w
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "defaults": {
-    "storm": "parallel",
-    "research": "single",
-    "architect": "single",
-    "implement": "single",
+    "brains": "parallel",
+    "map": "parallel",
+    "implement": "parallel",
     "nurture": "single",
     "secure": "single"
   },
@@ -55,10 +54,9 @@ When a BRAINS skill is invoked without an explicit mode flag, use these defaults
 
 | Skill | Default Mode |
 |-------|:------------:|
-| storm | parallel |
-| research | single |
-| architect | debate |
-| implement | single |
+| brains | parallel |
+| map | parallel |
+| implement | debate |
 | nurture | parallel |
 | secure | debate |
 
@@ -75,7 +73,7 @@ Providers: openai, anthropic
 ## Notes
 
 - These settings are gitignored by default (user-specific preferences)
-- Override any setting by passing explicit flags: `/brains:storm --single` always wins
+- Override any setting by passing explicit flags: `/brains:brains --single` always wins
 - Re-run `/brains:setup --local` to change these settings
 ```
 
@@ -92,7 +90,7 @@ The local settings file uses markdown (not JSON) because Claude Code auto-loads 
 
 Settings are resolved in this order (highest priority first):
 
-1. **Explicit flags** — `/brains:storm --debate` always wins
+1. **Explicit flags** — `/brains:brains --debate` always wins
 2. **Local settings** — `.claude/brains.local.md` (auto-loaded by Claude Code)
 3. **Global defaults** — `~/.config/brains/defaults.json` (read by skills via Read tool)
 4. **Built-in defaults** — hardcoded in each SKILL.md
@@ -115,10 +113,9 @@ plugin: brains
 
 | Skill | Default Mode |
 |-------|:------------:|
-| storm | parallel |
-| research | single |
-| architect | single |
-| implement | single |
+| brains | parallel |
+| map | parallel |
+| implement | parallel |
 | nurture | single |
 | secure | single |
 
@@ -132,3 +129,31 @@ Then ensure it's gitignored:
 ```bash
 echo '.claude/brains.local.md' >> .gitignore
 ```
+
+## BRAINS Runtime Settings
+
+All BRAINS runtime settings live under the `brains` key in `settings.local.json`. Example:
+
+```json
+{
+  "brains": {
+    "baseBranches": ["main", "master", "develop"],
+    "pollingIntervalSeconds": 15,
+    "teammateIdleTimeoutSeconds": 3600,
+    "userResponseTimeoutSeconds": 14400,
+    "researchStalenessSeconds": 3600,
+    "completionMarkerDir": "docs/plans/.state"
+  }
+}
+```
+
+### Fields
+
+| Key | Default | Purpose |
+|---|---|---|
+| `baseBranches` | `["main", "master", "develop"]` | Triggers phase 2's branch-creation offer when the user is on one of these |
+| `pollingIntervalSeconds` | `15` | How often master polls beads state and completion markers |
+| `teammateIdleTimeoutSeconds` | `3600` (1h) | Treat a teammate as crashed if no beads state change or marker update after this long |
+| `userResponseTimeoutSeconds` | `14400` (4h) | Pause the run and write paused.md if the user doesn't answer a needs-human questionnaire |
+| `researchStalenessSeconds` | `3600` (1h) | Phase 2 re-explores the codebase if the research document is older than this (or if any commits landed since) |
+| `completionMarkerDir` | `docs/plans/.state` | Where teammates write completion markers. Must be in `.gitignore`. |
