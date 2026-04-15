@@ -81,8 +81,8 @@ Mode inheritance is strict: the mode flag passed to `/brains:brains` becomes the
     - `--single`: a subagent generates a set of 2-4 questions with explicit pros and cons for each, informed by the prompt and research.
     - `--parallel`: both a subagent and the star-chamber generate candidate question sets; the main LLM merges them and removes duplicates.
     - `--debate`: the subagent and star-chamber debate the question set across the configured number of rounds (default 2) or until convergence.
-4. **Interactive questionnaire (main LLM ↔ user).** For each question: present it with pros and cons, accept the user's answer, then adapt the remaining question set based on new information. If an answer contradicts a research finding, introduces a new architectural dimension, or renders remaining questions interdependent in unforeseen ways, re-engage the star-chamber for question review and optionally spawn a fresh research subagent for the new dimension.
-5. **Architecture synthesis.** Produce the full architecture with up-to-date standards. For key frameworks, APIs, and libraries, specify the assumed MAJOR.MINOR version. This is provenance, not a lock.
+4. **Interactive questionnaire (main LLM ↔ user).** For each question: present it with pros and cons, accept the user's answer, then adapt the remaining question set based on new information. If an answer contradicts a research finding, introduces a new architectural dimension, or renders remaining questions interdependent in unforeseen ways, re-engage the star-chamber for question review and optionally spawn a fresh research subagent for the new dimension. **Visual companion:** if any question would be clearer with a visual (layout comparison, state-machine mockup, component diagram), offer the browser-based visual companion (once per session, then per-question decision). Use the terminal for conceptual questions, the browser for visual ones. The companion server was inherited from the former `storm` skill and is kept in place under `skills/brains/scripts/`.
+5. **Architecture synthesis.** Produce the full architecture with up-to-date standards. For key frameworks, APIs, and libraries, version specification is a recommendation (SHOULD, not MUST): prefer MAJOR.MINOR for semver libraries; use the library's native version scheme for non-semver (e.g., calendar versioning, Rails release lines). This is provenance, not a lock — implementation may bump versions as needed.
 6. **Architecture review** (mode-dependent):
     - `--single`: skip; present to user.
     - `--parallel`: star-chamber reviews the architecture; integrate feedback with user approval.
@@ -122,8 +122,8 @@ Mode inheritance is strict: the mode flag passed to `/brains:brains` becomes the
 - Cons: ...
 - Why rejected: ...
 
-## Assumed Versions
-- <framework/lib>: X.Y
+## Assumed Versions (SHOULD)
+- <framework/lib>: X.Y — in whatever versioning scheme the library uses
 - <api>: X.Y
 
 ## Diagram
@@ -141,35 +141,42 @@ Mode inheritance is strict: the mode flag passed to `/brains:brains` becomes the
 ### Flow
 
 1. Parse arguments. Default mode: `--parallel` (inherited if chained from phase 1).
-2. **Load inputs.** All accepted ADRs from phase 1 and the research document. **Codebase exploration policy:** if phase 1 produced the research document less than 1 hour ago and no git commits landed on the current branch since then, reuse phase 1's exploration — skip re-exploring. Otherwise (stale research, or commits landed since — common when branches have multiple writers), spawn a refresher subagent to re-explore the codebase and note any drift from the ADR's assumptions. Significant drift is surfaced to the user before proceeding; minor drift is noted in the plan document.
-3. **High-level plan generation (subagent).** Prompt the subagent to produce a task list that sketches what needs to be built without implementation specifics (intentionally stub-level — easier to clean up if re-architecture becomes necessary in phase 3), identifies dependencies between tasks, and — if there are more than approximately 12 tasks — groups them into plan-phases where each phase is independently testable. Output: `docs/plans/YYYY-MM-DD-<topic>-map.md`.
-4. **Plan review** (mode-dependent):
+2. **Derive topic slug** from the topic argument (kebab-case, lowercase). Example: *"add a health-check endpoint"* → `health-check-endpoint`.
+3. **Branch offer.** If the current branch is one of the configured base branches (default: `main`, `master`, `develop`), offer to create `brains/<slug>` and switch to it. If the user is already on a non-base branch, use it. If the user declines, continue on the current branch with a one-line warning that BRAINS tasks will be labelled with the current branch name.
+4. **Load inputs.** All accepted ADRs from phase 1 and the research document. **Codebase exploration policy:** if phase 1 produced the research document less than 1 hour ago and no git commits landed on the current branch since then, reuse phase 1's exploration — skip re-exploring. Otherwise (stale research, or commits landed since — common when branches have multiple writers), spawn a refresher subagent to re-explore the codebase and note any drift from the ADR's assumptions. Significant drift is surfaced to the user before proceeding; minor drift is noted in the plan document.
+5. **High-level plan generation (subagent).** Prompt the subagent to produce a task list that sketches what needs to be built without implementation specifics (intentionally stub-level — easier to clean up if re-architecture becomes necessary in phase 3), identifies dependencies between tasks, and — if there are more than approximately 12 tasks — groups them into plan-phases where each phase is independently testable. Output: `docs/plans/YYYY-MM-DD-<slug>-map.md` (overwrites any existing map for this slug — see *Plan Document Structure* below).
+6. **Plan review** (mode-dependent):
     - `--single`: skip.
     - `--parallel`: star-chamber reviews task ordering, sizing, coverage, and phasing; integrate feedback.
     - `--debate`: star-chamber debates the plan across rounds.
-5. **User gate.**
+7. **User gate.**
     - *Reject:* revise in place, re-present. Stay within phase 2.
     - *Accept:* proceed to task creation and chain into `/brains:implement`.
-6. **Task tracker selection.** Beads is the authoritative task tracker whenever it is available. Selection logic:
+8. **Task tracker selection.** Beads is the authoritative task tracker whenever it is available. Selection logic:
     - **Beads installed and initialized:** use it.
     - **Beads installed but uninitialized:** run `bd init --local` automatically and announce: *"Initializing beads for this repository (local mode)."* No prompt.
-    - **Beads unavailable, agent-teams mode active:** fall back to agent-teams' built-in task list. Announce to the user: *"beads is not installed. Falling back to the agent-teams task list. Cross-session recovery, dependency queries, and label filtering are degraded in this mode. Install beads (`npm install -g @anthropics/beads` or see docs) for the full experience."*
+    - **Beads unavailable, agent-teams mode active:** fall back to agent-teams' built-in task list. Announce to the user: *"beads is not installed. Falling back to the agent-teams task list. Cross-session recovery, dependency queries, and label filtering are degraded in this mode. Install beads for the full experience."*
     - **Beads unavailable, tmux mode:** fall back to `TaskCreate` / `TaskUpdate`. Same one-line awareness note as above, adjusted for the tracker.
-7. **Task creation.** For each plan-phase:
-    - Create a beads task per plan-item with labels `ready-for-grooming`, `phase-N`, and any domain labels inferred from the ADR.
+9. **Task creation.** For each plan-phase:
+    - Create a beads task per plan-item with labels `brains:topic:<slug>`, `brains:ready-for-grooming`, `brains:phase-N`, and any domain labels inferred from the ADR.
     - Wire inter-task dependencies from the plan.
-    - Create a `Nurture: phase N` beads task, blocked by all phase-N implementation tasks.
-    - Create a `Secure: phase N` beads task, blocked by the `Nurture: phase N` task.
-    - For the final plan-phase, create a `Cleanup` beads task, blocked by all phase-N secure tasks, with label `cleanup`.
-8. **Re-architecture cleanup (only on re-architecture-triggered re-run).** If phase 2 is being re-run because phase 3 escalated a `needs-human-kind=re-architecture` (see phase 3 failure flow), before creating new tasks, find all beads tasks from the superseded plan (identifiable by matching topic + `phase-*` label + creation timestamp before the new ADR's date) and close them with a `superseded` label. This preserves audit history without polluting the active task list. Implementation work already completed on superseded tasks remains in git history; what to do with it is up to the new plan.
+    - Create a `Nurture: phase N` beads task, labelled `brains:topic:<slug>` and `brains:phase-N`, blocked by all phase-N implementation tasks.
+    - Create a `Secure: phase N` beads task, labelled `brains:topic:<slug>` and `brains:phase-N`, blocked by the `Nurture: phase N` task.
+    - For the final plan-phase, create a `Cleanup` beads task, labelled `brains:topic:<slug>` and `brains:cleanup`, blocked by all phase-N secure tasks.
+10. **Re-architecture cleanup (only on re-architecture-triggered re-run).** If phase 2 is being re-run because phase 3 escalated a `needs-human-kind=re-architecture` (see phase 3 failure flow), before creating new tasks, find all beads tasks with the matching `brains:topic:<slug>` label and a creation timestamp before the new ADR's date, and close them with a `brains:superseded` label. This preserves audit history without polluting the active task list. Implementation work already completed on superseded tasks remains in git history; what to do with it is up to the new plan.
 
 ### Plan Document Structure
+
+The plan document is regenerated each time phase 2 runs (including on re-architecture). Existing plan documents at the same path are overwritten — this is the tracker, not the archive. ADRs, research notes, and per-phase nurture/secure reports are immutable by contrast and must not be overwritten.
 
 ```markdown
 # Plan: <topic>
 
+**Slug:** <topic-slug>
 **ADRs:** <list of paths>
 **Research:** <research doc path>
+**Mode:** <--single | --parallel | --debate>   ← persisted for --resume
+**Branch:** <branch name>
 
 ## Overview
 <one-paragraph summary of what this plan accomplishes>
@@ -186,6 +193,8 @@ Mode inheritance is strict: the mode flag passed to `/brains:brains` becomes the
 ...
 ```
 
+`/brains:implement --resume` reads the `Mode` line to restore the pipeline's mode. A CLI flag on `--resume` (e.g., `/brains:implement --resume --single`) overrides the persisted value for the resumed session.
+
 ## Phase 3 — `/brains:implement`
 
 ### Master-side flow
@@ -194,7 +203,7 @@ Mode inheritance is strict: the mode flag passed to `/brains:brains` becomes the
 2. **Prerequisite checks.**
     - Teammate spawn mode (see below): agent-teams if enabled, else tmux, else stop with install instructions.
     - Beads preferred; `TaskCreate` fallback.
-3. **Enumerate plan-phases** from beads labels (`phase-1`, `phase-2`, ..., `phase-N`, `cleanup`).
+3. **Enumerate plan-phases** from beads labels (`brains:phase-1`, `brains:phase-2`, ..., `brains:phase-N`, `brains:cleanup`), scoped to the current pipeline via `brains:topic:<slug>`. Slug is read from the `Slug:` field in the map document.
 4. **For each plan-phase in order:**
     1. Launch the teammate with its initial prompt (ADR paths, plan path, phase label, mode, completion marker path, behavioral constraints).
     2. Wait. Poll beads state (every ~15s) plus completion marker file. Surface one-line progress updates when state changes.
@@ -205,9 +214,15 @@ Mode inheritance is strict: the mode flag passed to `/brains:brains` becomes the
 ### Teammate-side flow (identical in both spawn modes)
 
 1. Read ADRs, plan, and mode from the initial prompt.
-2. **Grooming (single subagent).** For all `phase-N` tasks with label `ready-for-grooming`, research codebase and external docs as needed, flesh out descriptions, acceptance criteria, and implementation notes. If grooming surfaces new tasks, add them to beads with the same `phase-N` label. On completion, swap `ready-for-grooming` for `groomed`.
+2. **Grooming (single subagent).** For all tasks matching `brains:topic:<slug>` + `brains:phase-N` + `brains:ready-for-grooming`, research codebase and external docs as needed, flesh out descriptions, acceptance criteria, and implementation notes. If grooming surfaces new tasks, add them to beads with the same topic and phase labels. On completion, swap `brains:ready-for-grooming` for `brains:groomed`.
 3. **Execution (fresh subagent per task).** In dependency order, spawn a fresh subagent per task with: task description, relevant ADR excerpts, acceptance criteria, recent commits list. Subagent returns a diff or commits. Teammate closes the bead task.
-4. **Nurture (subagent, mode-aware).** After all `phase-N` implementation tasks are closed, invoke `/brains:nurture` scoped to phase-N changes, with the skeleton plan in context so the subagent knows what is coming in later phases. Findings become new beads tasks labelled `phase-N+1` or `cleanup` (if no next phase exists). Report to `docs/plans/<topic>-phase-N-nurture.md`. Close the `Nurture: phase N` task.
+4. **Nurture (subagent, mode-aware).** After all `phase-N` implementation tasks are closed (or when a phase is forced to complete early due to a pause/timeout — nurture and secure still run to reconcile state), invoke `/brains:nurture` scoped to phase-N changes, with the skeleton plan in context so the subagent knows what is coming in later phases. Nurture's responsibilities in v0.2.0 (beyond the existing skill scope) include:
+    - Ensuring all code changes produced during the phase are committed (atomic commits with conventional-commit messages).
+    - Ensuring any generated files that should not be tracked (build artifacts, secrets, local configs, completion markers, `.state/` dirs) are added to `.gitignore`.
+    - If the phase ended early (pause/timeout), reflecting the half-complete state in `docs/plans/<topic>-phase-N-nurture.md` and in any user-facing docs affected by the partial work — so a future reader knows what is and isn't done.
+    - Standard behavior: reviewing for bugs, missing tests, and spec drift; filing follow-up beads tasks labelled `brains:phase-N+1` or `brains:cleanup` (if no next phase exists).
+
+    Report to `docs/plans/<topic>-phase-N-nurture.md`. Close the `Nurture: phase N` task.
 5. **Secure (subagent, mode-aware).** Blocked on nurture completion. Same pattern as nurture. Report to `docs/plans/<topic>-phase-N-secure.md`. Close the `Secure: phase N` task.
 6. Write the completion marker file with status and notes.
 
@@ -257,17 +272,35 @@ Both tmux mode and agent-teams mode implement the same four-operation adapter in
 
 The `message` operation is optional — tmux mode does not support it, so master logic must not assume it. Any feature that requires mid-flight messaging (e.g., sending a resolved `needs-human` update directly to the running teammate in agent-teams mode) degrades gracefully in tmux mode to the polling-based equivalent.
 
+### Label Conventions
+
+All BRAINS-managed labels are prefixed `brains:` to avoid collision with labels the user may already use in their project. The full label set:
+
+- `brains:topic:<slug>` — applied to every task created by the pipeline. Slug is derived from the topic (kebab-case, lowercase). Enables multiple concurrent BRAINS pipelines in the same repo without state tangling.
+- `brains:phase-1`, `brains:phase-2`, ..., `brains:phase-N` — plan-phase membership.
+- `brains:ready-for-grooming` — newly created by `/brains:map`; waiting for a teammate to groom.
+- `brains:groomed` — grooming complete; task ready for execution.
+- `brains:needs-human` — task failed twice or escalated; pending user input. See `needs-human-kind` metadata for variant.
+- `brains:cleanup` — a finding with no natural next phase; handled by the final cleanup teammate.
+- `brains:superseded` — task from a prior plan that was replaced by a re-architecture run.
+- Optional domain labels (e.g., `ui`, `backend`, `auth`) inferred from the ADR — unprefixed, not managed by BRAINS.
+
+### Topic Slugs and Branches
+
+When phase 2 runs, it derives the topic slug from the user's original prompt (e.g., *"add a health-check endpoint"* → `health-check-endpoint`). The slug is used for:
+- All `brains:topic:<slug>` task labels
+- File names: `docs/plans/YYYY-MM-DD-<slug>-map.md`, etc.
+- Optional branch creation
+
+If the user is currently on `main` / `master` / `develop` (or any branch configured as a base branch in `settings.local.json`), phase 2 offers to create a `brains/<slug>` branch before proceeding. If the user declines, phase 2 continues on the current branch. If the user is already on a non-base branch, phase 2 uses the existing branch without prompting.
+
 ### Label Lifecycle
 
 ```
-created by /brains:map:    [ready-for-grooming, phase-N, <domain>...]
-after grooming:             [groomed, phase-N, <domain>...]
+created by /brains:map:    [brains:topic:<slug>, brains:ready-for-grooming, brains:phase-N, <domain>...]
+after grooming:             [brains:topic:<slug>, brains:groomed, brains:phase-N, <domain>...]
 after execution:            status=closed  (labels preserved for audit)
 ```
-
-Additional labels set during the pipeline:
-- `needs-human` — a task failed twice; pending user input via master questionnaire.
-- `cleanup` — a finding with no natural next phase; handled by the final cleanup teammate.
 
 ### Progress Surfacing
 
@@ -306,7 +339,10 @@ Master's pane prints one-line status updates when beads state changes (or when `
 1. **First failure.** Teammate re-engages the star-chamber to re-groom the task. Passes original description, failure output, and subagent reasoning. Star-chamber produces a revised description, revised acceptance criteria, and implementation hints. Task is retried with a fresh subagent.
 2. **Second failure (after star-chamber re-groom).** Teammate labels the task `needs-human`. Dependent phase-N tasks stay blocked (beads handles this automatically). Teammate continues with any non-blocked work. If all work is blocked, teammate writes `status=halted-needs-human` to its completion marker and waits without closing its pane.
 3. **Master responds.** Master sees `needs-human` during its periodic beads poll and opens a short questionnaire in the master pane. The questionnaire content depends on the sub-kind (see *needs-human variants* below). User answers update the beads task with human-provided guidance and remove `needs-human`.
-4. **User non-response timeout.** If the user does not respond to the questionnaire within the configured timeout (default: 4 hours, configurable via `settings.local.json`), master writes a summary to `docs/plans/<topic>-paused.md`, terminates any halted teammates, and exits. Beads state is preserved. The user can run `/brains:implement --resume` at any later time to pick up from where it stopped — they have everything they need in the paused.md summary plus the beads state.
+4. **User non-response timeout.** If the user does not respond to the questionnaire within the configured timeout (default: 4 hours, configurable via `settings.local.json`), master treats the phase as "halt early but tidy up":
+    - Before exiting, master runs the current phase's nurture and secure subagents against the partial work (even though not all phase-N tasks are closed). Nurture commits any uncommitted code, updates `.gitignore`, and reflects the half-complete state in the report. Secure runs a security review on whatever was built. Both file follow-up beads tasks as usual.
+    - Master then writes `docs/plans/<topic>-paused.md` — same format as the final wrap-up, with a `paused: true` flag in the frontmatter and explicit notes on which tasks were incomplete. `paused.md` and `wrap-up.md` share the same template; the difference is metadata only.
+    - Master terminates any halted teammates and exits. Beads state is preserved. The user runs `/brains:implement --resume` when ready; the resumed pipeline picks up from the first phase with open work.
 5. **Resume after user response.**
     - *Teammate still alive (typical in agent-teams mode):* dependent tasks unblock automatically. In agent-teams mode, master may also send a `SendMessage` nudge if the teammate is idle. Teammate picks up the unblocked work.
     - *Teammate halted (typical in tmux mode):* master closes the halted teammate's tmux pane (the pane is kept open during `halted-needs-human` state only for diagnostic visibility), then runs `/brains:implement --resume` which launches a fresh teammate that picks up where the halted teammate left off.
@@ -388,9 +424,9 @@ Each phase has a precise input and output contract. Phase boundaries are enforce
 
 | Phase | Consumes | Produces | Gate |
 |---|---|---|---|
-| `brains` | User prompt; optional existing ADRs in `docs/adr/` | Accepted ADR(s) in `docs/adr/`; research notes in `docs/plans/*-research.md`; architecture version pins embedded in ADR | User accepts ADR |
-| `map` | Accepted ADRs; research notes; codebase (re-explored only if stale or commits landed since — see phase 2 flow step 2) | Plan document in `docs/plans/*-map.md`; beads tasks labelled `ready-for-grooming`, `phase-N`, plus umbrella nurture/secure/cleanup tasks | User accepts plan |
-| `implement` | Plan document; ADRs; beads task state | Per-phase nurture/secure reports; final wrap-up in `docs/plans/*-wrap-up.md`; all beads tasks terminal | Implicit — pipeline ends |
+| `brains` | User prompt; optional existing ADRs in `docs/adr/` | Accepted ADR(s) in `docs/adr/`; research notes in `docs/plans/*-research.md`; architecture version pins (SHOULD) embedded in ADR | User accepts ADR |
+| `map` | Accepted ADRs; research notes; codebase (re-explored only if stale or commits landed since) | Topic slug; plan document in `docs/plans/*-map.md` (overwritable); beads tasks labelled with `brains:topic:<slug>`, `brains:ready-for-grooming`, `brains:phase-N`, plus umbrella nurture/secure/cleanup tasks; optional branch `brains/<slug>` | User accepts plan |
+| `implement` | Plan document (including persisted `Mode:`); ADRs; beads task state (filtered by `brains:topic:<slug>`) | Per-phase nurture/secure reports; `wrap-up.md` (or `paused.md` if interrupted); all pipeline beads tasks in a terminal state | Implicit — pipeline ends or pauses |
 
 Any phase that runs standalone (not via the chain) applies the same contract: if it can't find its consumed inputs, it stops and tells the user to run the prerequisite phase, or supplies the inputs via arguments.
 
@@ -420,8 +456,6 @@ Three new references live at the top of the plugin so skill files stay focused o
 
 ```
 skills/storm/SKILL.md
-skills/storm/references/visual-companion.md
-skills/storm/scripts/                         (entire dir — visual-companion server)
 skills/research/SKILL.md
 skills/architect/SKILL.md
 ```
@@ -430,6 +464,8 @@ skills/architect/SKILL.md
 
 ```
 skills/brains/SKILL.md                        (major rewrite — phase 1 entry)
+skills/brains/references/visual-companion.md  (moved from skills/storm/references/)
+skills/brains/scripts/                        (moved from skills/storm/scripts/ — visual companion server)
 skills/map/SKILL.md                           (new — phase 2)
 skills/map/references/plan-format.md          (new — plan document template)
 references/teammate-protocol.md               (new)
@@ -463,7 +499,20 @@ references/multi-llm-protocol.md              (no structural change)
 ```
 assets/brains-lifecycle.jpeg                  (redraw for three phases)
 skills/*/agents/brains-teammate.md            (reusable teammate subagent definition)
+agent-teams TaskCreated hook enforcement      (block teammate writes to native task list)
+reduced teammate permission scope             (teammates currently inherit lead's permission mode; in some cases a reduced scope would be safer, but scoping is deferred to v0.3 pending agent-teams API maturity)
 ```
+
+### Minimum versions (to be pinned at release)
+
+| Dependency | Floor policy |
+|---|---|
+| Claude Code | Version installed on the developer's machine at v0.2.0 release time. Agent-teams features require v2.1.32+ per upstream docs, but base pipeline (tmux mode) may work on earlier versions — pin the floor once at release. |
+| beads | Same policy — pin to the version installed at release. Setup skill validates the floor. |
+| tmux | Any version that supports `split-window -h` and `kill-pane -t`. No explicit floor — practically any tmux from the last decade. |
+| uv | Any version that ships `uvx` (0.1+). |
+
+Setup skill checks each at install time and emits an install hint if the floor isn't met.
 
 ## Testing Strategy
 
@@ -492,17 +541,18 @@ skills/*/agents/brains-teammate.md            (reusable teammate subagent defini
 
 - Star-chamber output quality (provider-dependent; untestable deterministically).
 - Nurture/secure finding accuracy (semantic judgment).
-- Visual companion (being removed with `storm`).
+- Visual companion browser rendering (human-verified in walkthroughs; no automated UI tests).
 
 ## Open Questions
 
-None blocking. Minor items to revisit during implementation, all configurable via `settings.local.json`:
+None blocking. Implementation-time details, all configurable via `settings.local.json`:
 
-- Completion marker file path — leaning toward `docs/plans/.state/` for auditability, must be `.gitignore`d.
-- Teammate idle timeout before "dead teammate" handling (currently proposed 60 min).
-- User-response timeout for `needs-human` questionnaires (currently proposed 4 hours).
-- Master progress-polling interval (currently proposed 15s).
-- Codebase-exploration-staleness threshold in phase 2 (currently proposed 1 hour and "any commits since research doc").
+- Completion marker file path — `docs/plans/.state/` for auditability; must be `.gitignore`d.
+- Teammate idle timeout (default 60 min).
+- User-response timeout for `needs-human` questionnaires (default 4 hours).
+- Master progress-polling interval (default 15s).
+- Codebase-exploration staleness threshold for phase 2 (default: research doc older than 1 hour, or any commits since).
+- Base branch names that trigger the topic-branch offer in phase 2 (default: `main`, `master`, `develop`).
 
 ## Acceptance Criteria for v0.2.0 Release
 
