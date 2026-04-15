@@ -1,6 +1,6 @@
 # Design: BRAINS Three-Phase Restructure
 
-**Date:** 2026-04-14
+**Date:** 2026-04-14 (revised 2026-04-15 after star-chamber review)
 **Status:** Draft — awaiting user review
 **Target version:** v0.2.0
 
@@ -141,8 +141,8 @@ Mode inheritance is strict: the mode flag passed to `/brains:brains` becomes the
 ### Flow
 
 1. Parse arguments. Default mode: `--parallel` (inherited if chained from phase 1).
-2. **Load inputs.** All accepted ADRs from phase 1, the research document, and a codebase snapshot (via subagent exploration).
-3. **High-level plan generation (subagent).** Prompt the subagent to produce a task list that sketches what needs to be built without implementation specifics, identifies dependencies between tasks, and — if there are more than approximately 12 tasks — groups them into plan-phases where each phase is independently testable. Output: `docs/plans/YYYY-MM-DD-<topic>-map.md`.
+2. **Load inputs.** All accepted ADRs from phase 1 and the research document. **Codebase exploration policy:** if phase 1 produced the research document less than 1 hour ago and no git commits landed on the current branch since then, reuse phase 1's exploration — skip re-exploring. Otherwise (stale research, or commits landed since — common when branches have multiple writers), spawn a refresher subagent to re-explore the codebase and note any drift from the ADR's assumptions. Significant drift is surfaced to the user before proceeding; minor drift is noted in the plan document.
+3. **High-level plan generation (subagent).** Prompt the subagent to produce a task list that sketches what needs to be built without implementation specifics (intentionally stub-level — easier to clean up if re-architecture becomes necessary in phase 3), identifies dependencies between tasks, and — if there are more than approximately 12 tasks — groups them into plan-phases where each phase is independently testable. Output: `docs/plans/YYYY-MM-DD-<topic>-map.md`.
 4. **Plan review** (mode-dependent):
     - `--single`: skip.
     - `--parallel`: star-chamber reviews task ordering, sizing, coverage, and phasing; integrate feedback.
@@ -150,13 +150,18 @@ Mode inheritance is strict: the mode flag passed to `/brains:brains` becomes the
 5. **User gate.**
     - *Reject:* revise in place, re-present. Stay within phase 2.
     - *Accept:* proceed to task creation and chain into `/brains:implement`.
-6. **Beads initialization (if needed).** Check whether beads is installed and whether this repository has been initialized. If beads is available but uninitialized, run `bd init --local` automatically and announce: *"Initializing beads for this repository (local mode)."* No prompt. If beads is unavailable, fall back silently to `TaskCreate` / `TaskUpdate` with a note.
+6. **Task tracker selection.** Beads is the authoritative task tracker whenever it is available. Selection logic:
+    - **Beads installed and initialized:** use it.
+    - **Beads installed but uninitialized:** run `bd init --local` automatically and announce: *"Initializing beads for this repository (local mode)."* No prompt.
+    - **Beads unavailable, agent-teams mode active:** fall back to agent-teams' built-in task list. Announce to the user: *"beads is not installed. Falling back to the agent-teams task list. Cross-session recovery, dependency queries, and label filtering are degraded in this mode. Install beads (`npm install -g @anthropics/beads` or see docs) for the full experience."*
+    - **Beads unavailable, tmux mode:** fall back to `TaskCreate` / `TaskUpdate`. Same one-line awareness note as above, adjusted for the tracker.
 7. **Task creation.** For each plan-phase:
     - Create a beads task per plan-item with labels `ready-for-grooming`, `phase-N`, and any domain labels inferred from the ADR.
     - Wire inter-task dependencies from the plan.
     - Create a `Nurture: phase N` beads task, blocked by all phase-N implementation tasks.
     - Create a `Secure: phase N` beads task, blocked by the `Nurture: phase N` task.
     - For the final plan-phase, create a `Cleanup` beads task, blocked by all phase-N secure tasks, with label `cleanup`.
+8. **Re-architecture cleanup (only on re-architecture-triggered re-run).** If phase 2 is being re-run because phase 3 escalated a `needs-human-kind=re-architecture` (see phase 3 failure flow), before creating new tasks, find all beads tasks from the superseded plan (identifiable by matching topic + `phase-*` label + creation timestamp before the new ADR's date) and close them with a `superseded` label. This preserves audit history without polluting the active task list. Implementation work already completed on superseded tasks remains in git history; what to do with it is up to the new plan.
 
 ### Plan Document Structure
 
@@ -234,9 +239,23 @@ fi
 
 ### Behavioral contract in both spawn modes
 
-- Beads remains the single source of truth for work items. Agent teams' built-in task list is **not** used for work items — only for coordination signals (lead observing teammate state).
-- Teammate strictly limits itself to beads tasks labelled with its assigned phase. Cross-phase findings are created with the target phase's label or `cleanup`.
-- Subagent definitions work in both modes. For v0.2.0, teammates are spawned as generic Claude Code instances with phase-specific prompts; promoting phase roles to reusable subagent definitions (e.g., a `brains-teammate` type) is deferred to v0.3.
+- **Task tracker primacy.** Beads is the single source of truth for work items whenever it is available — this rule holds in both tmux mode and agent-teams mode. In agent-teams mode, agent-teams' built-in task list is used only for framework-level coordination signals (spawn state, teammate idle notifications); it MUST NOT hold work items when beads is available. Teammate prompts include an explicit instruction: *"Do not create, claim, or update items in the agent-teams task list. Use beads for all work tracking."* Enforcement is advisory (prompt-level) in v0.2.0; a `TaskCreated` hook that blocks teammate writes to the native list is deferred to v0.3 pending stability of the agent-teams hooks API.
+- **Fallback chain.** If beads is unavailable, the agent-teams task list (agent-teams mode) or `TaskCreate`/`TaskUpdate` (tmux mode) becomes the authoritative tracker for that session. The user is told once, at phase-2 start, that they're in a degraded tracking mode.
+- **Teammate phase isolation.** Teammate strictly limits itself to tasks labelled with its assigned phase. Cross-phase findings are created with the target phase's label or `cleanup`.
+- **Subagent definitions** work in both modes. For v0.2.0, teammates are spawned as generic Claude Code instances with phase-specific prompts; promoting phase roles to reusable subagent definitions (e.g., a `brains-teammate` type) is deferred to v0.3.
+
+### Spawn adapter contract
+
+Both tmux mode and agent-teams mode implement the same four-operation adapter interface. Any future spawn mode (e.g., Docker, remote SSH) must implement these operations to be pluggable.
+
+| Operation | Input | Output | tmux implementation | Agent-teams implementation |
+|---|---|---|---|---|
+| `spawn(phase_label, initial_prompt)` | phase label, initial prompt | spawn handle (pane id or teammate id) | `tmux split-window "claude '<prompt>'"` | `TeamCreate` + teammate spawn |
+| `wait_complete(handle)` | spawn handle | blocks until completion marker or idle signal | poll completion marker file every 15s + poll beads state | await `TeammateIdle` notification + poll beads state |
+| `terminate(handle)` | spawn handle | confirmation | `tmux kill-pane -t <pane-id>` | `SendMessage` shutdown request, then cleanup |
+| `message(handle, text)` (optional) | spawn handle, message text | delivered / not-supported | not supported — no-op | `SendMessage` |
+
+The `message` operation is optional — tmux mode does not support it, so master logic must not assume it. Any feature that requires mid-flight messaging (e.g., sending a resolved `needs-human` update directly to the running teammate in agent-teams mode) degrades gracefully in tmux mode to the polling-based equivalent.
 
 ### Label Lifecycle
 
@@ -271,23 +290,89 @@ Master's pane prints one-line status updates when beads state changes (or when `
 |---|---|
 | Teammate process dies mid-phase | Missing completion marker after idle timeout (default 60min) → master prompts: restart teammate, skip, or abort. |
 | Teammate closes pane prematurely | Same as above. |
-| Beads unavailable mid-run | Master surfaces error and pauses; completion markers act as fallback signal. |
-| Star-chamber provider fails | Continue with remaining providers; log failed providers in the affected output file. |
+| Beads becomes unavailable mid-run | Master surfaces error and pauses; writes pause summary to `paused.md`; user resolves and runs `/brains:implement --resume`. |
+| Star-chamber provider fails during any phase | Continue with remaining providers; log failed providers in the affected output file. If all providers fail, master pauses and user can retry. |
 | User rejects plan at phase-2 gate | Stay in phase 2; revise plan; re-present. |
 | Teammate creates tasks labelled for a completed phase | Master detects during polling; relabels to `cleanup` so the final cleanup teammate picks them up. |
-| Grooming subagent marks zero tasks as groomed | Teammate writes `status=failed` to completion marker; master offers retry. |
+| Grooming subagent marks zero tasks as groomed after 3 attempts | Teammate writes `status=failed` to completion marker; master offers retry or abort. |
 | tmux becomes unavailable between plan-phases | Master preserves beads state and stops; `/brains:implement --resume` picks up at the next unfinished plan-phase once tmux returns. |
+| User doesn't respond to `needs-human` questionnaire within timeout (default 4h) | Master writes `paused.md` and exits. State preserved; user runs `/brains:implement --resume` when ready. |
+| Repeated `needs-human` cycles on the same task | Allowed by design. User will rework the task or the acceptance criteria themselves if the loop becomes unproductive. No automatic limit. |
+| Completion marker file corrupt or partially written | Master attempts to parse; if parsing fails, treats as a teammate crash (same handling as "teammate process dies"). |
+| Beads dependencies create an unresolvable cycle (unlikely — plan generation rejects cycles) | Master aborts phase with a clear error listing the cycle; user fixes the dependency graph manually and re-runs. |
 
 ### Task Failure Flow (Phase 3 Execution)
 
 1. **First failure.** Teammate re-engages the star-chamber to re-groom the task. Passes original description, failure output, and subagent reasoning. Star-chamber produces a revised description, revised acceptance criteria, and implementation hints. Task is retried with a fresh subagent.
 2. **Second failure (after star-chamber re-groom).** Teammate labels the task `needs-human`. Dependent phase-N tasks stay blocked (beads handles this automatically). Teammate continues with any non-blocked work. If all work is blocked, teammate writes `status=halted-needs-human` to its completion marker and waits without closing its pane.
-3. **Master responds.** Master sees `needs-human` during its periodic beads poll and opens a short questionnaire: "Phase N task T-X.Y failed twice. Here is what was tried and what failed. How would you like to proceed?" User answers update the beads task with human-provided guidance and remove `needs-human`.
-4. **Resume.**
+3. **Master responds.** Master sees `needs-human` during its periodic beads poll and opens a short questionnaire in the master pane. The questionnaire content depends on the sub-kind (see *needs-human variants* below). User answers update the beads task with human-provided guidance and remove `needs-human`.
+4. **User non-response timeout.** If the user does not respond to the questionnaire within the configured timeout (default: 4 hours, configurable via `settings.local.json`), master writes a summary to `docs/plans/<topic>-paused.md`, terminates any halted teammates, and exits. Beads state is preserved. The user can run `/brains:implement --resume` at any later time to pick up from where it stopped — they have everything they need in the paused.md summary plus the beads state.
+5. **Resume after user response.**
     - *Teammate still alive (typical in agent-teams mode):* dependent tasks unblock automatically. In agent-teams mode, master may also send a `SendMessage` nudge if the teammate is idle. Teammate picks up the unblocked work.
     - *Teammate halted (typical in tmux mode):* master closes the halted teammate's tmux pane (the pane is kept open during `halted-needs-human` state only for diagnostic visibility), then runs `/brains:implement --resume` which launches a fresh teammate that picks up where the halted teammate left off.
 
-This two-strike flow replaces the generic three-strike circuit breaker for phase-3 task execution, where human-in-the-loop resolution is cheap. The three-strike rule still applies elsewhere — for example, if the grooming subagent itself fails three times, the teammate halts the phase.
+Repeated `needs-human` cycles on the same task are allowed by design. If a task bounces back to the human multiple times, that's the user's signal to rework the task themselves or rethink the approach; the system does not impose a loop limit. This two-strike flow replaces the generic three-strike circuit breaker for phase-3 task execution, where human-in-the-loop resolution is cheap. The three-strike rule still applies elsewhere — for example, if the grooming subagent itself fails three times, the teammate halts the phase.
+
+### Needs-human variants
+
+`needs-human` is a single label but covers several distinct situations that produce different questionnaire prompts. The kind is stored as a metadata field on the beads task (`needs-human-kind`):
+
+| Kind | When it's set | Questionnaire prompt to user |
+|---|---|---|
+| `failure` | Default — task failed twice after star-chamber re-groom | *"Phase N task T-X.Y failed twice. Here is what was tried and what failed: <summary>. How would you like to proceed? You can (a) provide implementation guidance, (b) rewrite the acceptance criteria, (c) mark the task as skipped for this run."* |
+| `impossible` | Teammate or star-chamber concludes the task's acceptance criteria cannot be satisfied given the current architecture (e.g., the ADR is wrong, a dependency doesn't exist, a constraint is contradictory) | *"Phase N task T-X.Y appears to be impossible as specified. Here is the reasoning: <summary>. You may know something we don't. Options: (a) provide missing context, (b) adjust the acceptance criteria, (c) mark the task as skipped, (d) escalate to re-architecture."* |
+| `re-architecture` | Teammate discovers that an accepted ADR's assumptions are invalid (a library doesn't behave as expected, a constraint was missed, a dependency is deprecated). Filed explicitly with `needs-human-kind=re-architecture` | *"Phase N task T-X.Y surfaces an architecture problem: <summary>. Options: (a) suggest an in-place workaround that avoids re-architecture, (b) stop and run `/brains:brains` again with this context — existing phase-2 task stubs will be cleaned up and regenerated against the new ADR."* |
+
+Because the phase's nurture and secure tasks are blocked by the in-progress implementation tasks, a re-architecture escalation naturally pauses the phase without any special cleanup logic — it's the same halt behavior as the default failure kind.
+
+### Task Failure State Machine
+
+```
+                            ┌───────────────┐
+                            │   groomed     │
+                            │ (ready to     │
+                            │  execute)     │
+                            └───────┬───────┘
+                                    │ execute
+                                    ▼
+                            ┌───────────────┐
+                            │  in-progress  │
+                            └───┬───────┬───┘
+                    success     │       │     failure 1
+                                ▼       ▼
+                          ┌─────────┐  ┌──────────────┐
+                          │  closed │  │  regrooming  │
+                          │(terminal│  │ (star-chamber│
+                          │   OK)   │  │   re-groom)  │
+                          └─────────┘  └──────┬───────┘
+                                              │ retry
+                                              ▼
+                                       ┌───────────────┐
+                                       │  in-progress  │
+                                       └───┬───────┬───┘
+                              success      │       │      failure 2
+                                           ▼       ▼
+                                     ┌─────────┐  ┌──────────────┐
+                                     │  closed │  │ needs-human  │
+                                     └─────────┘  │  (kind: one  │
+                                                  │  of 3 above) │
+                                                  └──────┬───────┘
+                                                         │ user responds
+                                      ┌──────────────────┼──────────────────┐
+                                      ▼                  ▼                  ▼
+                              ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+                              │ retry-with-  │   │   skipped    │   │re-architect. │
+                              │  guidance    │   │ (terminal OK │   │  pause phase,│
+                              │(→ in-progress│   │ — not built) │   │  run phase 1 │
+                              └──────────────┘   └──────────────┘   └──────────────┘
+
+User non-response timeout (4h default) from needs-human:
+  → master writes paused.md, exits
+  → beads state preserved
+  → /brains:implement --resume picks up
+```
+
+Terminal states: `closed` (done), `skipped` (deliberately not built — noted in the final wrap-up), `re-architected` (phase 1 restarted; old tasks cleaned up by the new phase-2 run).
 
 ### Resumability
 
@@ -296,6 +381,18 @@ This two-strike flow replaces the generic three-strike circuit breaker for phase
 - **Phase 3** is resumable at plan-phase granularity. `/brains:implement --resume` queries beads, finds the first plan-phase with open tasks, and launches a teammate there. Same launch flow as a fresh run.
 
 ## Cross-Cutting Concerns
+
+### Phase Contracts
+
+Each phase has a precise input and output contract. Phase boundaries are enforced by file presence and user gates — if a consuming phase can't find its inputs, it errors with actionable guidance rather than silently re-doing work.
+
+| Phase | Consumes | Produces | Gate |
+|---|---|---|---|
+| `brains` | User prompt; optional existing ADRs in `docs/adr/` | Accepted ADR(s) in `docs/adr/`; research notes in `docs/plans/*-research.md`; architecture version pins embedded in ADR | User accepts ADR |
+| `map` | Accepted ADRs; research notes; codebase (re-explored only if stale or commits landed since — see phase 2 flow step 2) | Plan document in `docs/plans/*-map.md`; beads tasks labelled `ready-for-grooming`, `phase-N`, plus umbrella nurture/secure/cleanup tasks | User accepts plan |
+| `implement` | Plan document; ADRs; beads task state | Per-phase nurture/secure reports; final wrap-up in `docs/plans/*-wrap-up.md`; all beads tasks terminal | Implicit — pipeline ends |
+
+Any phase that runs standalone (not via the chain) applies the same contract: if it can't find its consumed inputs, it stops and tells the user to run the prerequisite phase, or supplies the inputs via arguments.
 
 ### Mode Semantics Summary
 
@@ -399,11 +496,13 @@ skills/*/agents/brains-teammate.md            (reusable teammate subagent defini
 
 ## Open Questions
 
-None blocking. Minor items to revisit during implementation:
+None blocking. Minor items to revisit during implementation, all configurable via `settings.local.json`:
 
-- Whether the completion marker file path belongs under `docs/plans/.state/` or a system temp directory. Leaning toward `docs/plans/.state/` for auditability, but it must be `.gitignore`d.
-- Exact default for the idle-timeout on teammates (currently proposed 60 min). Likely configurable via `settings.local.json`.
-- Whether the master's progress-polling interval (currently proposed 15s) should be configurable.
+- Completion marker file path — leaning toward `docs/plans/.state/` for auditability, must be `.gitignore`d.
+- Teammate idle timeout before "dead teammate" handling (currently proposed 60 min).
+- User-response timeout for `needs-human` questionnaires (currently proposed 4 hours).
+- Master progress-polling interval (currently proposed 15s).
+- Codebase-exploration-staleness threshold in phase 2 (currently proposed 1 hour and "any commits since research doc").
 
 ## Acceptance Criteria for v0.2.0 Release
 
