@@ -138,12 +138,12 @@ cat > ~/.config/star-chamber/providers.json << 'CONF'
       "api_key": "${ANTHROPIC_API_KEY}"
     },
     {"provider": "google",
-      "model": "gemini-2.5-pro",
+      "model": "gemini-3.1-pro",
       "api_key": "${GEMINI_API_KEY}"
     },
     {
       "provider": "openai",
-      "model": "gpt-4o",
+      "model": "gpt-5.4",
       "api_key": "${FUELIX_API_KEY}",
       "api_base": "https://api.fuelix.ai"
     }
