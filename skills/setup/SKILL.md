@@ -119,6 +119,8 @@ CONF
 Then show:
 > "Set your platform key: `export ANY_LLM_KEY=\"ANY.v1....\"`
 > Create an account at https://any-llm.ai if you don't have one."
+> If you're using an openai compatible backend like FUELIX, then
+> you need to specify the api_base.
 
 **Option 2 — Direct keys:**
 ```bash
@@ -127,9 +129,24 @@ cat > ~/.config/star-chamber/providers.json << 'CONF'
 {
   "timeout_seconds": 60,
   "providers": [
-    {"provider": "openai", "model": "gpt-4o", "api_key": "${OPENAI_API_KEY}"},
-    {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "api_key": "${ANTHROPIC_API_KEY}"},
-    {"provider": "google", "model": "gemini-2.5-pro", "api_key": "${GEMINI_API_KEY}"}
+    {"provider": "openai",
+      "model": "gpt-4o",
+      "api_key": "${OPENAI_API_KEY}"
+    },
+    {"provider": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "api_key": "${ANTHROPIC_API_KEY}"
+    },
+    {"provider": "google",
+      "model": "gemini-2.5-pro",
+      "api_key": "${GEMINI_API_KEY}"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "api_key": "${FUELIX_API_KEY}",
+      "api_base": "https://api.fuelix.ai"
+    }
   ]
 }
 CONF
@@ -141,6 +158,7 @@ Then show:
 > export OPENAI_API_KEY=\"sk-...\"
 > export ANTHROPIC_API_KEY=\"sk-ant-...\"
 > export GEMINI_API_KEY=\"...\"
+> export FUELIX_API_KEY=\"...\"
 > ```
 > Remove providers from the config if you don't have keys for them."
 
