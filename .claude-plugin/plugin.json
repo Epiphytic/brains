@@ -1,7 +1,7 @@
 {
   "name": "brains",
-  "version": "0.1.0",
-  "description": "Brainstorm Research Architect Implement Nurture Secure — a structured multi-LLM development workflow for complex tasks",
+  "version": "0.2.0",
+  "description": "Brainstorm-to-implementation multi-LLM development workflow plugin — three-phase pipeline with teammate Claude Code instances, beads-based task tracking, and per-plan-phase nurture and secure review",
   "author": {
     "name": "Liam Helmer"
   },

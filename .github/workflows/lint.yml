@@ -120,8 +120,8 @@ jobs:
           fi
 
           # Visual companion reference must exist
-          if [ ! -f "skills/storm/references/visual-companion.md" ]; then
-            echo "FAIL: skills/storm/references/visual-companion.md missing"
+          if [ ! -f "skills/brains/references/visual-companion.md" ]; then
+            echo "FAIL: skills/brains/references/visual-companion.md missing"
             failed=1
           fi
 
@@ -133,22 +133,22 @@ jobs:
 
           # Visual companion scripts must exist
           for script in frame-template.html helper.js server.cjs start-server.sh stop-server.sh; do
-            if [ ! -f "skills/storm/scripts/$script" ]; then
-              echo "FAIL: skills/storm/scripts/$script missing"
+            if [ ! -f "skills/brains/scripts/$script" ]; then
+              echo "FAIL: skills/brains/scripts/$script missing"
               failed=1
             fi
           done
 
           # Shell scripts must be executable
-          for script in skills/storm/scripts/*.sh; do
+          for script in skills/brains/scripts/*.sh; do
             if [ ! -x "$script" ]; then
               echo "FAIL: $script is not executable"
               failed=1
             fi
           done
 
-          # Every non-suggest skill must reference multi-llm-protocol
-          for skill in storm research architect implement nurture secure brains; do
+          # Every multi-LLM-capable skill must reference multi-llm-protocol
+          for skill in brains implement nurture secure; do
             if ! grep -q 'multi-llm-protocol.md' "skills/$skill/SKILL.md"; then
               echo "FAIL: skills/$skill/SKILL.md does not reference multi-llm-protocol.md"
               failed=1

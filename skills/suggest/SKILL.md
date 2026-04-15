@@ -38,8 +38,12 @@ can help with [specific complexity identified — e.g., "exploring the design sp
 before committing to an architecture" or "ensuring the security implications are
 covered"].
 
-- `/brains:storm` — start with brainstorming to explore approaches
-- `/brains:brains` — run the full pipeline (Brainstorm → Research → Architect → Implement → Nurture → Secure)
+/brains:brains <topic>
+
+This starts phase 1 (interactive research + questionnaire + ADR). On ADR
+approval it chains into /brains:map (phase 2: plan + beads tasks), and then
+/brains:implement (phase 3: teammate-executed implementation with per-phase
+nurture and secure review).
 
 Or just proceed directly if you prefer.
 ```

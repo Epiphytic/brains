@@ -1,2 +1,8 @@
 .claude/*.local.md
 .superpowers/
+
+# Agent fork-join session files (auto-added)
+.fork-join/
+
+# BRAINS runtime artifacts (completion markers, paused state)
+docs/plans/.state/

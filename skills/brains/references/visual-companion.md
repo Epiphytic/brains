@@ -1,6 +1,6 @@
 # Visual Companion Guide
 
-Browser-based visual brainstorming companion for showing mockups, diagrams, and options during the storm phase. Available as a tool — not a mode. Accepting the companion means it is available for questions that benefit from visual treatment; not every question goes through the browser.
+Browser-based visual brainstorming companion for showing mockups, diagrams, and options during phase 1 (`/brains:brains`). Available as a tool — not a mode. Accepting the companion means it is available for questions that benefit from visual treatment; not every question goes through the browser.
 
 ## When to Use
 
@@ -24,16 +24,16 @@ A question about a UI topic is not automatically a visual question. "What does p
 
 ## Starting a Session
 
-Set `STORM_SCRIPTS` to the storm skill's scripts directory:
+Set `BRAINS_SCRIPTS` to the brains skill's scripts directory:
 
 ```bash
-STORM_SCRIPTS="$BRAINS_PATH/skills/storm/scripts"
+BRAINS_SCRIPTS="$BRAINS_PATH/skills/brains/scripts"
 ```
 
 Start the server:
 
 ```bash
-$STORM_SCRIPTS/start-server.sh --project-dir "$(pwd)"
+$BRAINS_SCRIPTS/start-server.sh --project-dir "$(pwd)"
 ```
 
 Returns JSON with `port`, `url`, `screen_dir`, and `state_dir`. Save these values.
@@ -151,7 +151,7 @@ Last `choice` event is typically the final selection. The click pattern may reve
 ## Cleaning Up
 
 ```bash
-$STORM_SCRIPTS/stop-server.sh $SESSION_DIR
+$BRAINS_SCRIPTS/stop-server.sh $SESSION_DIR
 ```
 
 With `--project-dir`, mockups persist in `.superpowers/brainstorm/` for reference.

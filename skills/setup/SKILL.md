@@ -33,6 +33,54 @@ Parse the `--global` or `--local` flag from arguments. If neither is provided, a
 
 Both scopes can be run — global sets the baseline, local overrides per-project.
 
+## Version Floor Checks
+
+The setup skill validates minimum tool versions at install time. Pinned floors:
+
+| Tool | Floor | Command | Remedy if missing |
+|---|---|---|---|
+| Claude Code | 2.1.109 | `claude --version` | https://docs.anthropic.com/en/docs/claude-code |
+| uv | 0.1.0 | `uv --version` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| beads (optional but recommended) | 0.63.3 | `bd --version` | https://github.com/anthropics/claude-code (beads plugin) |
+| tmux (required unless agent-teams enabled) | any | `tmux -V` | `apt/brew/pkg install tmux` |
+
+At implementation time, replace `<VERSION>` with the version installed on the developer's machine (run the command, read the output). Pin it literally.
+
+If any required tool is missing or below the floor, stop setup and emit the remedy. Record the detected versions to `~/.claude/plugins/state/brains/setup-log.json` for audit.
+
+## Teammate Spawn Mode Detection
+
+Phase 3 requires either Claude Code agent-teams enabled or tmux installed. Setup checks both:
+
+```bash
+# Agent-teams check
+if [[ "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-0}" == "1" ]]; then
+  echo "agent-teams: enabled"
+else
+  echo "agent-teams: disabled (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in settings to enable)"
+fi
+
+# tmux check
+command -v tmux >/dev/null 2>&1 && echo "tmux: available" || echo "tmux: missing"
+```
+
+If neither is available, advise the user to enable one before running `/brains:implement`. `/brains:brains` and `/brains:map` work without either.
+
+## Beads Initialization
+
+If beads is installed but the current repository hasn't been initialized, setup initializes it on the user's behalf:
+
+```bash
+if command -v bd >/dev/null 2>&1; then
+  if ! bd status >/dev/null 2>&1; then
+    bd init --local
+    echo "Initialized beads for this repository (local mode)."
+  fi
+fi
+```
+
+This matches the behavior of `/brains:map` — if the user skips setup entirely, phase 2 will initialize beads on first run.
+
 ## Global Setup
 
 ### Step 1: Check and Install Dependencies
@@ -62,7 +110,7 @@ uvx star-chamber list-providers
 
 **Node.js (optional — visual companion):**
 Do NOT install automatically. Inform the user:
-> "Node.js is optional — it powers the visual companion in the storm phase. Install from https://nodejs.org/ if you want browser-based brainstorming."
+> "Node.js is optional — it powers the visual companion in phase 1 (`/brains:brains`). Install from https://nodejs.org/ if you want browser-based brainstorming."
 
 **tmux (optional — implement handoff):**
 Do NOT install automatically. Inform the user:
@@ -119,6 +167,8 @@ CONF
 Then show:
 > "Set your platform key: `export ANY_LLM_KEY=\"ANY.v1....\"`
 > Create an account at https://any-llm.ai if you don't have one."
+> If you're using an openai compatible backend like FUELIX, then
+> you need to specify the api_base.
 
 **Option 2 — Direct keys:**
 ```bash
@@ -127,9 +177,24 @@ cat > ~/.config/star-chamber/providers.json << 'CONF'
 {
   "timeout_seconds": 60,
   "providers": [
-    {"provider": "openai", "model": "gpt-4o", "api_key": "${OPENAI_API_KEY}"},
-    {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "api_key": "${ANTHROPIC_API_KEY}"},
-    {"provider": "google", "model": "gemini-2.5-pro", "api_key": "${GEMINI_API_KEY}"}
+    {"provider": "openai",
+      "model": "gpt-4o",
+      "api_key": "${OPENAI_API_KEY}"
+    },
+    {"provider": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "api_key": "${ANTHROPIC_API_KEY}"
+    },
+    {"provider": "google",
+      "model": "gemini-3.1-pro",
+      "api_key": "${GEMINI_API_KEY}"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-5.4",
+      "api_key": "${FUELIX_API_KEY}",
+      "api_base": "https://api.fuelix.ai"
+    }
   ]
 }
 CONF
@@ -141,6 +206,7 @@ Then show:
 > export OPENAI_API_KEY=\"sk-...\"
 > export ANTHROPIC_API_KEY=\"sk-ant-...\"
 > export GEMINI_API_KEY=\"...\"
+> export FUELIX_API_KEY=\"...\"
 > ```
 > Remove providers from the config if you don't have keys for them."
 
@@ -158,14 +224,13 @@ Present the built-in defaults and let the user customize:
 
 | Skill | Built-in Default | Your Choice |
 |-------|:----------------:|:-----------:|
-| storm | parallel | ? |
-| research | single | ? |
-| architect | single | ? |
-| implement | single | ? |
+| brains | parallel | ? |
+| map | parallel | ? |
+| implement | parallel | ? |
 | nurture | single | ? |
 | secure | single | ? |
 
-> "Would you like to change any defaults? Enter the skill name and mode (e.g., `research parallel`), or press enter to keep all defaults."
+> "Would you like to change any defaults? Enter the skill name and mode (e.g., `map parallel`), or press enter to keep all defaults."
 
 Also ask for default debate rounds:
 > "Default debate rounds (currently 2):"
@@ -179,12 +244,11 @@ Write `~/.config/brains/defaults.json` using the Write tool:
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "defaults": {
-    "storm": "parallel",
-    "research": "single",
-    "architect": "single",
-    "implement": "single",
+    "brains": "parallel",
+    "map": "parallel",
+    "implement": "parallel",
     "nurture": "single",
     "secure": "single"
   },

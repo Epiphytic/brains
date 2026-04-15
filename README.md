@@ -4,35 +4,37 @@
 
 ![BRAINS: Agentic Coding Lifecycle](assets/brains-lifecycle.jpeg)
 
-A structured, multi-LLM development workflow plugin for Claude Code. Guides complex tasks through six disciplined phases, with optional multi-model debate and review at each stage.
+A structured, multi-LLM development workflow plugin for Claude Code. Guides complex tasks through a three-phase pipeline, with optional multi-model debate and review at each stage.
 
 ## How It Works
 
-BRAINS encodes a six-phase methodology for tackling complex software tasks:
+BRAINS encodes a three-phase methodology for tackling complex software tasks:
 
-1. **Storm** -- Brainstorm ideas into designs through collaborative dialogue, optionally amplified by a multi-LLM council
-2. **Research** -- Investigate the codebase, dependencies, documentation, and prior art
-3. **Architect** -- Make architectural decisions, record ADRs, produce technical designs
-4. **Implement** -- Create a detailed plan, then hand off execution to a fresh Claude Code instance via tmux
-5. **Nurture** -- Review the implementation for bugs, missing features, and test gaps, then fix them
-6. **Secure** -- Security review covering OWASP Top 10, secrets scanning, dependency auditing, and threat modeling
+1. **brains** — Phase 1: interactive research, question-driven questionnaire, and RFC 2119 ADR production. Default mode: `--parallel` with star-chamber review.
+2. **map** — Phase 2: high-level plan generation (stub-level, not implementation-specific), with beads-based task tracking using `brains:`-prefixed labels.
+3. **implement** — Phase 3: launches a fresh Claude Code teammate per plan-phase via agent-teams (preferred) or tmux. Each teammate grooms its tasks, executes them with fresh subagents, then runs nurture and secure reviews.
 
-Each phase can be invoked independently or chained together with `/brains:brains` for the full pipeline.
+Each phase chains into the next via a user-approval gate. The `nurture` and `secure` skills remain user-invocable for standalone use on any codebase.
 
 ## Prerequisites
 
 **Required:**
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) -- the plugin host
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — the plugin host
 
 **Required for multi-LLM modes (parallel, debate):**
-- [uv](https://docs.astral.sh/uv/) -- Python package manager
-- [star-chamber](https://pypi.org/project/star-chamber/) -- multi-LLM council (PyPI package, invoked via `uvx star-chamber`)
+- [uv](https://docs.astral.sh/uv/) — Python package manager
+- [star-chamber](https://pypi.org/project/star-chamber/) — multi-LLM council (PyPI, invoked via `uvx star-chamber`)
 - Provider configuration at `~/.config/star-chamber/providers.json`
 
+**Required for phase 3 (`/brains:implement`):** either
+- [tmux](https://github.com/tmux/tmux) installed, OR
+- Claude Code agent-teams enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in settings; Claude Code v2.1.32+)
+
+**Strongly recommended:**
+- [beads](https://github.com/anthropics/claude-code) plugin — authoritative task tracker. Falls back to `TaskCreate` / `TaskUpdate` (tmux mode) or agent-teams' built-in task list (agent-teams mode) with degraded functionality.
+
 **Optional:**
-- [beads](https://github.com/anthropics/claude-code) plugin -- for task management in the implement phase (falls back to TaskCreate/TaskUpdate)
-- [tmux](https://github.com/tmux/tmux) -- for launching the implementation session in a separate pane
-- [Node.js](https://nodejs.org/) -- for the visual companion browser tool in the storm phase
+- [Node.js](https://nodejs.org/) — for the visual companion browser tool in phase 1
 
 ## Installation
 
@@ -49,16 +51,14 @@ After installing, run `/brains:setup --global` to install dependencies and confi
 ## Skills
 
 | Skill | Command | Default Mode | Description |
-|-------|---------|:------------:|-------------|
-| setup | `/brains:setup` | -- | Install dependencies, configure LLM providers, set defaults |
-| suggest | *(auto)* | -- | Detects complex tasks and recommends BRAINS |
-| storm | `/brains:storm` | parallel | Multi-LLM brainstorming with visual companion |
-| research | `/brains:research` | single | Codebase, dependency, and documentation investigation |
-| architect | `/brains:architect` | single | Design plans, ADRs, architectural decisions |
-| implement | `/brains:implement` | single | Plan and execute in a separate Claude Code instance |
-| nurture | `/brains:nurture` | single | Review, test, and refine the implementation |
-| secure | `/brains:secure` | single | Security review and vulnerability assessment |
-| brains | `/brains:brains` | *(per-phase)* | Full pipeline: all six phases in succession |
+|-------|---------|:---:|-------------|
+| setup | `/brains:setup` | — | Install dependencies, configure LLM providers, set defaults |
+| suggest | *(auto)* | — | Detects complex tasks and recommends BRAINS |
+| brains | `/brains:brains` | parallel | Phase 1: research + questionnaire + ADR |
+| map | `/brains:map` | parallel | Phase 2: high-level plan + beads tasks |
+| implement | `/brains:implement` | parallel | Phase 3: teammate-per-plan-phase execution |
+| nurture | `/brains:nurture` | single | Review and refine (standalone or subagent) |
+| secure | `/brains:secure` | single | Security review (standalone or subagent) |
 
 ## Modes
 
@@ -74,53 +74,47 @@ Additional flag: `--rounds N` sets the number of debate rounds (default: 2, requ
 
 ```bash
 # Examples
-/brains:storm "design a caching layer"              # Uses default (parallel)
-/brains:storm --single "design a caching layer"      # Local only
-/brains:storm --debate --rounds 3 "design a caching layer"  # 3-round debate
-/brains:brains --parallel "build a REST API"         # All phases use parallel
+/brains:brains "design a caching layer"                       # Uses default (parallel)
+/brains:brains --single "design a caching layer"              # Local only
+/brains:brains --debate --rounds 3 "design a caching layer"   # 3-round debate
+/brains:map --parallel                                         # Phase 2 with parallel review
+/brains:implement --parallel                                   # Phase 3 with parallel review
 ```
 
 ## Phase Outputs
 
-Each phase writes its output to `docs/plans/`:
-
 | Phase | Output File | Additional |
 |-------|-------------|------------|
-| Storm | `YYYY-MM-DD-<topic>-storm.md` | |
-| Research | `YYYY-MM-DD-<topic>-research.md` | |
-| Architect | `YYYY-MM-DD-<topic>-architect.md` | ADRs in `docs/adr/` |
-| Implement | `YYYY-MM-DD-<topic>-implement.md` | |
-| Nurture | `YYYY-MM-DD-<topic>-nurture.md` | |
-| Secure | `YYYY-MM-DD-<topic>-secure.md` | |
+| brains | `docs/plans/YYYY-MM-DD-<slug>-research.md` | ADRs in `docs/adr/` |
+| map | `docs/plans/YYYY-MM-DD-<slug>-map.md` | beads tasks with `brains:` labels |
+| implement | `docs/plans/YYYY-MM-DD-<slug>-phase-N-nurture.md`, `-phase-N-secure.md` per plan-phase | `docs/plans/<slug>-wrap-up.md` (or `-paused.md`) |
 
 ## Plugin Structure
 
 ```
 brains/
-├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest
+├── .claude-plugin/plugin.json
 ├── skills/
 │   ├── setup/
-│   │   ├── SKILL.md             # Setup wizard
-│   │   └── references/
-│   │       └── settings-format.md
-│   ├── suggest/SKILL.md         # Auto-triggered complexity detection
-│   ├── storm/
-│   │   ├── SKILL.md             # Brainstorming skill
+│   ├── suggest/
+│   ├── brains/            (phase 1)
 │   │   ├── references/
 │   │   │   └── visual-companion.md
-│   │   └── scripts/             # Visual companion server
-│   ├── research/SKILL.md
-│   ├── architect/SKILL.md
-│   ├── implement/SKILL.md
-│   ├── nurture/SKILL.md
-│   ├── secure/SKILL.md
-│   └── brains/SKILL.md          # Full pipeline orchestrator
+│   │   └── scripts/       (visual companion server)
+│   ├── map/               (phase 2)
+│   │   └── references/plan-format.md
+│   ├── implement/         (phase 3)
+│   ├── nurture/
+│   └── secure/
 ├── references/
-│   └── multi-llm-protocol.md   # Shared multi-LLM invocation protocol
+│   ├── multi-llm-protocol.md
+│   ├── teammate-protocol.md
+│   ├── beads-integration.md
+│   └── failure-recovery.md
 ├── docs/
-│   ├── testing-humans.md        # Manual testing guide
-│   └── testing-llm.md          # LLM testing protocol
+│   ├── testing-humans.md
+│   ├── testing-llm.md
+│   └── plans/
 ├── LICENSE
 └── README.md
 ```

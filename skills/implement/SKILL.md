@@ -1,173 +1,204 @@
 ---
 name: implement
-description: This skill should be used when the user asks to "implement", "build it", "start coding", "execute the plan", "create the implementation", or invokes "/brains:implement". Creates an implementation plan, optionally reviews it with multi-LLM council, then executes in a separate Claude Code instance via tmux. Supports --single (default), --parallel, and --debate modes for plan review.
+description: This skill should be used when the user asks to "implement the plan", "execute the plan", "start implementation", "build the tasks", "run the teammates", or invokes "/brains:implement". Phase 3 of the BRAINS pipeline: spawns a teammate Claude Code instance per plan-phase via agent-teams (preferred) or tmux (fallback), waits on beads state, handles task failures with two-strike-plus-human-in-loop flow. Supports --single, --parallel (default), and --debate modes for nurture/secure review within each plan-phase. Also supports --resume to pick up after a pause.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [scope]"
+argument-hint: "[--single|--parallel|--debate] [--resume] [--slug <slug>]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
-# Implement: Plan and Execute
+# BRAINS Phase 3: Implement with Teammates
 
-Create a detailed implementation plan from architectural designs, then hand off execution to a fresh Claude Code instance in a tmux session. The current session stays clean for oversight.
+Launch a fresh Claude Code teammate for each plan-phase, coordinate via beads state, handle failures gracefully. Default mode: `--parallel` (applies to nurture/secure reviews inside each teammate).
 
 Set the plugin base path:
+
 ```bash
 BRAINS_PATH="<base directory from header>/../.."
 ```
 
 ## Mode Behavior
 
-Modes apply to the **plan review** phase, not the implementation itself:
+Modes affect the nurture and secure subagents that run INSIDE each teammate, not implementation itself:
 
 | Mode | Flow |
-|------|------|
-| `--single` | Create plan locally, no council review. **(default)** |
-| `--parallel` | Create plan locally, then send to council for review. |
-| `--debate` | Debate the plan across LLMs before finalizing. |
+|---|---|
+| `--single` | Nurture/secure run without star-chamber |
+| `--parallel` (default) | Nurture/secure findings reviewed by star-chamber |
+| `--debate` | Nurture/secure run as star-chamber debates |
 
-For `--parallel` and `--debate`, read and follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
+For `--parallel` and `--debate`, follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
 
-## Process
+## Process (Master-Side)
 
-### 1. Gather Inputs
+### 1. Parse arguments
 
-Check for prior BRAINS phase outputs in `docs/plans/`:
-- Storm specs (`*-storm.md`)
-- Research reports (`*-research.md`)
-- Architecture designs (`*-architect.md`)
-- ADRs in `docs/adr/`
+Parse mode, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
 
-If no prior outputs exist, gather requirements directly from the user.
+### 2. Load plan
 
-### 2. Create Implementation Plan
+Read the plan document. Extract:
+- Slug
+- Mode (may be overridden by CLI arg)
+- Branch (warn if current branch differs)
+- Plan-phases (enumerate via `brains:phase-*` labels filtered by `brains:topic:<slug>`)
 
-Break the architecture into ordered, atomic implementation tasks. Each task should:
+### 3. Prerequisite checks
 
-- Have a clear deliverable (a file, a function, a test, a config change)
-- Be small enough to complete in one focused session
-- List its dependencies (which tasks must complete first)
-- Include acceptance criteria
+Spawn mode detection (see `$BRAINS_PATH/references/teammate-protocol.md` § Spawn-Mode Detection):
 
-Structure the plan as:
+```bash
+if [[ "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-0}" == "1" ]]; then
+  SPAWN_MODE="agent-teams"
+elif command -v tmux >/dev/null 2>&1; then
+  SPAWN_MODE="tmux"
+else
+  echo "error: /brains:implement requires either tmux or agent-teams."
+  echo "Install tmux (apt/brew/pkg install tmux) OR"
+  echo "enable agent-teams: set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in settings.json (Claude Code v2.1.32+)."
+  exit 1
+fi
+```
+
+Task tracker: follow `$BRAINS_PATH/references/beads-integration.md` § Tracker Selection.
+
+### 4. Resume (if --resume)
+
+Query the task tracker for the first `brains:phase-N` with any open tasks. Resume at that plan-phase.
+
+### 5. Per-plan-phase loop
+
+For each plan-phase in order:
+
+#### 5a. Launch teammate
+
+Construct the initial prompt per `$BRAINS_PATH/references/teammate-protocol.md` § Teammate Initial Prompt Template — follow the template exactly; do not paraphrase or omit sections. The prompt MUST include accepted ADR paths, the plan path, the phase label (e.g. `brains:phase-2`), the inherited mode flag, the completion marker path under `docs/plans/.state/`, and the behavioral constraints specified in the teammate-protocol reference.
+
+**tmux mode:**
+```bash
+tmux split-window -h "claude '<initial prompt>'"
+```
+
+**agent-teams mode:**
+Invoke `TeamCreate` with appropriate lead-provided teammate specification. See `$BRAINS_PATH/references/teammate-protocol.md` for the exact call pattern.
+
+#### 5b. Wait for completion
+
+Poll every 15s (configurable via `settings.local.json` key `brains.pollingIntervalSeconds`):
+- Completion marker file at `docs/plans/.state/<slug>-phase-<N>-marker.json`
+- Beads task counts: tasks with `brains:topic:<slug>` + `brains:phase-<N>` by status
+
+On state change, emit a one-line status update to the master pane (see `$BRAINS_PATH/references/teammate-protocol.md` § Progress Surfacing).
+
+In agent-teams mode, `TeammateIdle` notifications arrive automatically; still poll beads for state changes that don't trigger idle.
+
+#### 5c. Handle needs-human
+
+When a task acquires the `brains:needs-human` label, dispatch to the handler per `$BRAINS_PATH/references/failure-recovery.md` § Needs-Human Variants. Each variant has its own questionnaire prompt.
+
+#### 5d. User-response timeout
+
+If the user does not respond to a questionnaire within the timeout (default 4h, configurable via `settings.local.json` key `brains.userResponseTimeoutSeconds`), follow `$BRAINS_PATH/references/failure-recovery.md` § User-Response Timeout.
+
+#### 5e. Advance
+
+On teammate completion marker status `complete`: close the teammate's pane / shut down the agent-teams teammate, advance to next plan-phase.
+
+### 6. Final cleanup teammate (conditional)
+
+If any `brains:cleanup`-labelled tasks exist: launch one more teammate with phase label `brains:cleanup`, wait for completion, same flow as other phases.
+
+### 7. Wrap-up
+
+If a cleanup teammate ran, read its wrap-up report at `docs/plans/<slug>-wrap-up.md`. Otherwise master writes the wrap-up itself.
+
+Wrap-up structure:
 
 ```markdown
-# Implementation Plan: [Topic]
+# Wrap-up: <topic>
 
-## Task Sequence
+**Slug:** <slug>
+**Paused:** false   <!-- true in paused.md variant -->
 
-### Phase 1: Foundation
-- [ ] Task 1.1: [description] — [file(s)] — [acceptance criteria]
-- [ ] Task 1.2: ...
+## Per-Phase Summary
+### Phase 1
+- Tasks completed: X/Y
+- Issues found (nurture): ...
+- Issues found (secure): ...
 
-### Phase 2: Core Logic
-- [ ] Task 2.1: ...
+### Phase 2
+...
 
-### Phase 3: Integration
-- [ ] Task 3.1: ...
+## Outstanding Work
+<beads tasks still open, e.g., future/deferred labels>
 
-### Phase 4: Nurture
-- [ ] Run /brains:nurture — review, test, fix issues
+## Known Gaps and Limitations
+<surfaced by nurture/secure>
 
-### Phase 5: Secure
-- [ ] Run /brains:secure — security review and hardening
+## Suggested Follow-up Plans
+<optional>
 ```
 
-**Critical:** Always append Nurture and Secure as the final phases of the implementation plan. These are not optional — they are the tail end of the BRAINS pipeline.
+Summarize the wrap-up to the user and close any remaining teammate panes.
 
-### 3. Council Review (if multi-LLM mode)
+## Process (Teammate-Side)
 
-**Parallel mode:** Send the plan to the council:
-```
-Review this implementation plan for [project].
+Teammates read this section as part of their initial prompt.
 
-[Architecture summary]
-[Implementation plan]
+### T1. Read inputs
 
-Evaluate:
-1. Is the task ordering correct? Are dependencies properly sequenced?
-2. Are tasks appropriately sized — small enough to be atomic, large enough to be meaningful?
-3. Are there missing tasks or gaps in coverage?
-4. Are the acceptance criteria testable?
-5. Is the Nurture/Secure phase adequately scoped?
-```
+Read the ADR paths, plan path, phase label, mode, and completion marker path from the initial prompt.
 
-**Debate mode:** Debate the plan structure, task ordering, and completeness across providers.
+### T2. Grooming (single subagent)
 
-Integrate feedback and finalize the plan with user approval.
+Query the task tracker for tasks matching `brains:topic:<slug>` + `brains:phase-<N>` + `brains:ready-for-grooming` (see `$BRAINS_PATH/references/beads-integration.md` § Task Queries).
 
-### 4. Write Plan
+Spawn a single grooming subagent. Prompt:
+> "Groom these tasks for phase <N>: <task list>. For each task, research the codebase and external docs as needed. Flesh out the description, acceptance criteria, and implementation notes. If grooming surfaces new tasks in the same phase scope, add them to beads with labels `brains:topic:<slug>` + `brains:phase-<N>` + `brains:ready-for-grooming`. On completion, swap `brains:ready-for-grooming` for `brains:groomed` on each task."
 
-Save the finalized plan to `docs/plans/YYYY-MM-DD-<topic>-implement.md`. Commit to git.
+On grooming failure (3-strike): write `status=failed` to completion marker; halt.
 
-### 5. Create Tasks
+### T3. Execution (fresh subagent per task)
 
-**Check for beads plugin:**
-```bash
-ls ~/.claude/plugins/*/skills/beads 2>/dev/null && echo "beads:available" || ls ~/.claude/plugins/cache/*/skills/beads 2>/dev/null && echo "beads:available" || echo "beads:unavailable"
-```
+Iterate through groomed tasks in dependency order (beads' `ready` query returns unblocked tasks):
 
-**If beads is available:** Create beads tasks from the implementation plan. Each plan task becomes a bead with its description, dependencies, and acceptance criteria.
+For each task:
+1. Spawn a fresh subagent (Agent tool) with the task description, relevant ADR excerpts, acceptance criteria, and recent commits list.
+2. Subagent returns a diff or produces commits.
+3. On success: close the bead task. Continue.
+4. On failure: follow `$BRAINS_PATH/references/failure-recovery.md` § Task Failure Flow (Phase 3 Execution).
 
-**If beads is unavailable:** Create tasks using TaskCreate/TaskUpdate. Each plan task becomes a tracked task with appropriate dependencies.
+### T4. Nurture (subagent, mode-aware)
 
-### 6. Launch Implementation Session
+After all phase-<N> implementation tasks are closed (or at pause-timeout — nurture still runs on partial work), invoke `/brains:nurture --scope phase-<N>` as a subagent.
 
-Detect the tmux environment and hand off implementation to a separate Claude Code instance.
+Nurture is responsible for:
+- Committing any uncommitted code (atomic commits, conventional-commit messages)
+- Updating `.gitignore` for files that shouldn't be tracked
+- Reflecting half-complete state in docs if the phase ended early
+- Standard behaviors: bug review, test coverage checks, spec drift detection
+- Filing follow-up beads tasks labelled `brains:phase-<N+1>` or `brains:cleanup`
 
-**Check for tmux:**
-```bash
-[[ -n "$TMUX" ]] && echo "tmux:active" || echo "tmux:inactive"
-```
+Close the `Nurture: phase <N>` umbrella task on completion.
 
-**If in tmux — create a new pane:**
+### T5. Secure (subagent, mode-aware)
 
-```bash
-PLAN_PATH="docs/plans/YYYY-MM-DD-<topic>-implement.md"
-tmux split-window -h "claude 'Read the implementation plan at $PLAN_PATH and execute it task by task. After completing all implementation tasks, run /brains:nurture followed by /brains:secure as specified in the plan.'"
-```
+Blocked on nurture completion. Invoke `/brains:secure --scope phase-<N>` as a subagent. Same pattern as nurture. Close the `Secure: phase <N>` umbrella task.
 
-Tell the user:
-> "Implementation session launched in a new tmux pane. Switch to it with `Ctrl-b o` or `Ctrl-b ;`.
->
-> This session remains available for questions or oversight. The implementation pane has a fresh context with the plan loaded."
+### T6. Write completion marker
 
-**If not in tmux — provide instructions:**
+Write the completion marker JSON file per `$BRAINS_PATH/references/teammate-protocol.md` § Completion Marker Format.
 
-Tell the user:
-> "Implementation is ready to begin. To start in a clean session:
->
-> 1. Open a new terminal (or start tmux with `tmux`)
-> 2. Run:
->    ```
->    claude "Read the implementation plan at <plan-path> and execute it task by task. After completing all implementation tasks, run /brains:nurture followed by /brains:secure as specified in the plan."
->    ```
->
-> Starting fresh ensures the implementation session has full context budget for the work ahead."
+## Task Failure Flow
 
-### 7. Monitor (Optional)
-
-If the user stays in the current session, offer to monitor progress:
-- Check task completion status periodically
-- Answer questions about the plan or architecture
-- Provide clarification on design decisions from prior phases
-
-## Key Design Decisions
-
-- **Fresh context**: The implementation runs in a separate Claude Code instance to maximize available context for the actual coding work. The planning session's context is already consumed by brainstorming, research, and architecture.
-- **Beads integration**: Beads provides better task management with dependencies and cross-session tracking. TaskCreate/TaskUpdate is the fallback when beads is not installed.
-- **Nurture + Secure in plan**: These phases are appended to the implementation plan rather than run separately, ensuring they execute after implementation completes even if the user doesn't manually invoke them.
-
-## Phase Transition
-
-The implement skill's plan includes nurture and secure as final tasks. When the implementation session completes those phases, the full BRAINS pipeline is done.
-
-If running standalone (not via `/brains:brains`):
-
-> "Implementation plan created and session launched.
->
-> The plan includes nurture and secure phases at the end. Once implementation completes,
-> those phases will run automatically as part of the plan."
+Follow `$BRAINS_PATH/references/failure-recovery.md` — entire file. Key points:
+- First failure → star-chamber re-groom → retry
+- Second failure → label `brains:needs-human` with metadata `needs-human-kind` = `failure` | `impossible` | `re-architecture`
+- User-response timeout → run nurture+secure on partial work, write paused.md, exit cleanly
+- Repeated needs-human cycles are allowed (no automatic limit)
 
 ## Additional Resources
 
-- **`$BRAINS_PATH/references/multi-llm-protocol.md`** — shared multi-LLM invocation protocol
+- **`$BRAINS_PATH/references/teammate-protocol.md`** — spawn, sync, marker format
+- **`$BRAINS_PATH/references/beads-integration.md`** — task queries, label conventions, fallback
+- **`$BRAINS_PATH/references/failure-recovery.md`** — failure flow, needs-human variants, state machine
+- **`$BRAINS_PATH/references/multi-llm-protocol.md`** — star-chamber invocation protocol
