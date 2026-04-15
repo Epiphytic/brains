@@ -1,8 +1,8 @@
 ---
 name: secure
-description: This skill should be used when the user asks to "secure", "security review", "check for vulnerabilities", "threat model", "security audit", "check for secrets", "OWASP review", or invokes "/brains:secure". Security review, vulnerability assessment, and threat modeling. Supports --single (default), --parallel, and --debate modes.
+description: This skill should be used when the user asks to "secure", "security review", "check for vulnerabilities", "threat model", "security audit", "check for secrets", "OWASP review", or invokes "/brains:secure". Security review, vulnerability assessment, and threat modeling. Supports --single (default), --parallel, and --debate modes. When invoked by a phase-3 teammate with --scope phase-N, scopes the security review to changes in that plan-phase and files follow-up beads tasks for the next phase or cleanup.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [scope]"
+argument-hint: "[--single|--parallel|--debate] [--scope phase-N | all] [paths...]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent
 ---
 
@@ -24,6 +24,13 @@ BRAINS_PATH="<base directory from header>/../.."
 | `--debate` | Multi-round security deliberation across LLMs. |
 
 For `--parallel` and `--debate`, read and follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
+
+## Scope
+
+The `--scope` flag controls what secure reviews:
+
+- `--scope phase-N` — review only files touched in the current plan-phase. File follow-up beads tasks labelled `brains:phase-<N+1>` if a next phase exists, else `brains:cleanup`. Invoked by phase-3 teammates.
+- `--scope all` (default when invoked standalone) — classic behavior, reviews all recent changes.
 
 ## Process
 
@@ -194,6 +201,13 @@ Write the security report to `docs/plans/YYYY-MM-DD-<topic>-secure.md`:
 ```
 
 Commit to git.
+
+When invoked with `--scope phase-N`, additionally:
+
+- Report file: `docs/plans/<slug>-phase-<N>-secure.md`
+- Follow-up tasks filed to beads with label `brains:phase-<N+1>` (if next phase exists) or `brains:cleanup`.
+
+Close the `Secure: phase <N>` umbrella task on completion.
 
 ## Phase Transition
 
