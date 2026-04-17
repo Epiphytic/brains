@@ -6,6 +6,8 @@
 
 A structured, multi-LLM development workflow plugin for Claude Code. Guides complex tasks through a three-phase pipeline, with optional multi-model debate and review at each stage.
 
+> **Why three phases, just-in-time grooming, and per-phase review?** See [**docs/why-brains.md**](docs/why-brains.md) for the design rationale — why forced brainstorming, sequential phases, focused teammate context, and star-chamber gating reduce token spend and rework compared to unstructured LLM coding.
+
 ## How It Works
 
 BRAINS encodes a three-phase methodology for tackling complex software tasks:
