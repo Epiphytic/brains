@@ -161,3 +161,11 @@ jobs:
           fi
 
           echo "All internal references verified."
+
+  manifest-lint:
+    name: Manifest Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run manifest-lint
+        run: bash scripts/manifest-lint.sh

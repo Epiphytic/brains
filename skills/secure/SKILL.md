@@ -23,7 +23,7 @@ BRAINS_PATH="<base directory from header>/../.."
 | `--parallel` | Review locally, then send to council for security review. |
 | `--debate` | Multi-round security deliberation across LLMs. |
 
-For `--parallel` and `--debate`, read and follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
+For `--parallel` and `--debate`, read and follow `$BRAINS_PATH/references/multi-llm-protocol.md`. Under `--lean`, read the compact excerpt at `$BRAINS_PATH/references/multi-llm-protocol-compact.md` instead; consult the full file only for debate-round synthesis or error handling.
 
 ## Scope
 

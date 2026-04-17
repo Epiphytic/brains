@@ -196,6 +196,17 @@ Standard context for star-chamber invocations:
 3. **Recent changes**: `git diff HEAD~3 --stat` for implementation context
 4. **Skill-specific context**: Each skill adds its own (design docs, test results, research findings, etc.)
 
+### Under `--lean`
+
+When the invoking skill was passed `--lean`, scope the context assembly as follows:
+
+- **`star-chamber ask` (design-question) calls:** OMIT `git diff HEAD~3 --stat`. The diff is low-signal noise for design questions where no implementation yet exists.
+- **`star-chamber review` (code-review) calls:** RETAIN `git diff HEAD~3 --stat`. The diff is the review subject.
+- **Project rules:** include a `.claude/rules/*.md` file ONLY when its frontmatter contains a tag `architectural` or `security-relevant`. Unmarked rules files (CI conventions, commit-message style, etc.) are omitted — they are not relevant to external LLMs evaluating architecture or code.
+- **Architecture docs:** unchanged; include `ARCHITECTURE.md` if present.
+
+These scoping rules do not apply under the default (non-lean) path, which preserves v0.2.x context assembly verbatim.
+
 ## Runtime Constraints
 
 Inherited from star-chamber:

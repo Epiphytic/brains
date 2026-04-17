@@ -16,7 +16,7 @@ BRAINS encodes a three-phase methodology for tackling complex software tasks:
 2. **map** — Phase 2: high-level plan generation (stub-level, not implementation-specific), with beads-based task tracking using `brains:`-prefixed labels.
 3. **implement** — Phase 3: launches a fresh Claude Code teammate per plan-phase via agent-teams (preferred) or tmux. Each teammate grooms its tasks, executes them with fresh subagents, then runs nurture and secure reviews.
 
-Each phase chains into the next via a user-approval gate. The `nurture` and `secure` skills remain user-invocable for standalone use on any codebase.
+Each phase chains into the next via a user-approval gate — or, with `--autopilot`, skips those gates and runs hands-off from phase 1 through phase 3, stopping only on a `brains:needs-human` escalation. The `nurture` and `secure` skills remain user-invocable for standalone use on any codebase.
 
 ## Prerequisites
 
@@ -84,7 +84,22 @@ Most skills support three modes for LLM involvement:
 | Parallel | `--parallel` | Work locally, then send to council for review |
 | Debate | `--debate` | Multi-round deliberation across LLMs |
 
-Additional flag: `--rounds N` sets the number of debate rounds (default: 2, requires `--debate`).
+Additional flags:
+
+- `--rounds N` — number of debate rounds (default: 2, requires `--debate`).
+- `--autopilot` — orthogonal to mode; skips user gates and auto-chains phase 1 → 2 → 3. Star-chamber review still runs per selected mode and actionable feedback is auto-integrated; genuine architectural judgment calls surface as `brains:needs-human` tasks during phase 3. At the phase 1 ADR gate, `--autopilot` pre-selects *"accept ADR(s), push to origin, chain into `/brains:map --autopilot`"* (option 2 of 5). State is persisted in the plan header and honored by `/brains:implement --resume`.
+- `--lean` — orthogonal to mode and to `--autopilot`; activates the token-efficiency path introduced in v0.3. Uses a compact protocol excerpt in place of the full `multi-llm-protocol.md`, summarizes the research document via a structured `Research-Summary` block in the plan header (ADRs are ALWAYS delivered whole — never summarized), splits the `/brains:implement` skill so teammates load only the teammate-side protocol, lazy-loads `failure-recovery.md`, and scopes star-chamber context per call type. Each role loads only what its manifest in [`manifests/`](manifests/) declares. Default is off — behavior without `--lean` is byte-identical to v0.2.x. `--lean` inherits through phase chaining. Expected savings: ~30–45% of structural overhead per `--parallel --autopilot --lean` run.
+- `--teammate-model <sonnet|opus|haiku>` *(implement only)* — selects the model used to spawn per-phase teammate Claude Code instances AND their internal subagents (grooming, implementation, nurture, secure). When the orchestrator is Opus and this flag is absent, `/brains:implement` offers *"Spawn teammates using Sonnet to reduce cost? [Y/n]"* (default Y; auto-selected Y under `--autopilot`). Star-chamber invocations are unaffected.
+- `--no-escalate-on-retry` *(implement only)* — disable escalation-on-retry (which is **on by default** in v0.3). With escalation on, a task that fails twice on the teammate model is retried a third time on the orchestrator model before the `brains:needs-human` label is applied. The default is configurable via `settings.local.json` key `brains.escalateOnRetry` (boolean; default `true`); the CLI flag overrides the setting.
+- `--ignore-model-hints` *(implement only)* — disregard `model-hint: prefer-opus` fields emitted by the grooming subagent. Without this flag, tasks flagged `prefer-opus` escalate to the orchestrator model for their implementation subagent even when a lower teammate tier is the default.
+
+### Skip-to-implementation shortcut
+
+At the phase-1 gate, if the synthesized architecture flags *no new external dependencies, no new external services, and a single-component change*, `/brains:brains` offers an additional acceptance option: **skip `/brains:map` and `/brains:implement`; implement the ADR inline in the current session**. `nurture` and `secure` subagents still run at the end. Autopilot never auto-selects this shortcut.
+
+At the phase-2 gate, if the plan has *fewer than 10 total tasks, all in a single plan-phase, none flagged `risk:high`*, `/brains:map` offers a similar acceptance option to **skip the teammate spawn and implement inline**.
+
+The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens per teammate) for trivial changes where a full teammate spawn is overkill.
 
 ```bash
 # Examples
@@ -93,6 +108,10 @@ Additional flag: `--rounds N` sets the number of debate rounds (default: 2, requ
 /brains:brains --debate --rounds 3 "design a caching layer"   # 3-round debate
 /brains:map --parallel                                         # Phase 2 with parallel review
 /brains:implement --parallel                                   # Phase 3 with parallel review
+/brains:brains --autopilot "design a caching layer"           # Hands-off: phase 1 → 2 → 3
+/brains:brains --autopilot --lean "design a caching layer"    # Hands-off + token-efficiency path
+/brains:implement --teammate-model sonnet                     # Force Sonnet for teammate instances
+/brains:implement --no-escalate-on-retry                      # Disable 3rd-retry-on-orchestrator
 ```
 
 ## Phase Outputs
@@ -122,9 +141,13 @@ brains/
 │   └── secure/
 ├── references/
 │   ├── multi-llm-protocol.md
+│   ├── multi-llm-protocol-compact.md   (compact excerpt for --lean)
 │   ├── teammate-protocol.md
 │   ├── beads-integration.md
 │   └── failure-recovery.md
+├── manifests/                  (per-role context manifests, loaded under --lean)
+├── scripts/
+│   └── manifest-lint.sh        (CI lint for manifest/skill drift)
 ├── docs/
 │   ├── testing-humans.md
 │   ├── testing-llm.md

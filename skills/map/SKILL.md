@@ -2,7 +2,7 @@
 name: map
 description: This skill should be used when the user asks to "map out the plan", "create the implementation plan", "outline the tasks", "plan it out", "sketch the implementation", or invokes "/brains:map". Phase 2 of the BRAINS pipeline: high-level plan generation (no implementation specifics), topic-slug derivation, optional branch creation, beads task creation with brains:-prefixed labels, and user approval gate. Supports --single, --parallel (default), and --debate modes for plan review, plus an optional --autopilot flag that skips user gates and auto-chains into /brains:implement --autopilot. Chains into /brains:implement at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--rounds N] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--rounds N] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -24,7 +24,7 @@ BRAINS_PATH="<base directory from header>/../.."
 | `--parallel` (default) | Star-chamber reviews task ordering, sizing, coverage, phasing |
 | `--debate` | Star-chamber debates the plan across rounds |
 
-For `--parallel` and `--debate`, follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
+For `--parallel` and `--debate`, follow `$BRAINS_PATH/references/multi-llm-protocol.md`. Under `--lean`, follow the compact excerpt at `$BRAINS_PATH/references/multi-llm-protocol-compact.md`; consult the full file only for debate-round synthesis or error handling.
 
 ## Autopilot (`--autopilot`)
 
@@ -41,9 +41,11 @@ Autopilot is propagated downstream — the inherited state is persisted in the p
 
 ### 1. Parse arguments
 
-Parse mode, `--autopilot`, rounds, and topic. If no topic and no prior phase 1 output exists, ask the user. If chained from phase 1, inherit both the mode and autopilot state.
+Parse mode, `--autopilot`, `--lean`, rounds, and topic. If no topic and no prior phase 1 output exists, ask the user. If chained from phase 1, inherit the mode, autopilot state, and `--lean` state.
 
 In autopilot, if a topic is truly missing and no prior phase 1 output exists, do NOT stall waiting for input — stop with a `brains:needs-human` style message to the user explaining that `/brains:map --autopilot` requires either a topic argument or a prior phase 1 output.
+
+`--lean` activates the token-efficiency path: use the compact multi-llm-protocol excerpt inline rather than reading the full reference; read the `Research-Summary` block from the plan header (written by phase 1) instead of re-reading the full research document — drill down to the full file only when a summary field is empty-but-relevant; follow the role manifest at `$BRAINS_PATH/manifests/phase-2-map.md`. Default off. `--lean` propagates to `/brains:implement` at the phase transition.
 
 ### 2. Derive topic slug
 
@@ -66,7 +68,11 @@ Base branches (configurable via `settings.local.json` key `brains.baseBranches`,
 
 ### 4. Load inputs
 
-Find accepted ADR(s) in `docs/adr/` matching the topic (by filename pattern or by user-selection if ambiguous) and the research document at `docs/plans/<slug>-research.md`.
+Find accepted ADR(s) in `docs/adr/` matching the topic (by filename pattern or by user-selection if ambiguous) — ADRs are ALWAYS loaded whole, under all modes including `--lean`.
+
+**Research document loading depends on `--lean`:**
+- **Non-lean (default):** read the full research document at `docs/plans/<slug>-research.md`. Preserves v0.2.x behavior.
+- **Under `--lean`:** read only the `research-summary` block stashed by phase 1 (per `$BRAINS_PATH/skills/brains/references/research-summary-schema.md`). Drill down into the full research document only when a summary field is empty-but-relevant, when a task is flagged `risk:high` during grooming, or when `--ignore-research-summary` was passed.
 
 Codebase exploration policy:
 - If the research document's mtime is within 1 hour AND no git commits landed on the current branch since then: reuse phase 1's exploration; skip this step.
@@ -96,8 +102,9 @@ In `--autopilot`, star-chamber feedback (when applicable) is integrated without 
 
 - **Interactive:** Present the plan. Options:
   - **Reject:** revise in place, re-present. Stay within phase 2.
-  - **Accept:** proceed to task creation.
-- **Autopilot:** skip the gate. Proceed directly to task creation. Emit a one-line status update summarizing the plan (phase count, task count, any star-chamber findings that were integrated).
+  - **Accept:** proceed to task creation, then chain to `/brains:implement`.
+  - **(Conditional) Accept and skip teammate spawn** — available ONLY when all three are true: plan has <10 total tasks; all tasks fit in a single plan-phase; no task is flagged `risk:high` during grooming (check the per-task grooming annotations, or run a lightweight grooming pass now if not yet performed). When accepted, create the beads tasks (step 9) and then proceed to inline implementation in the CURRENT session without invoking `/brains:implement`. Execute tasks directly; run `/brains:nurture --scope phase-1` and `/brains:secure --scope phase-1` at the end.
+- **Autopilot:** skip the gate. Proceed directly to task creation and chain to `/brains:implement --autopilot`. Autopilot NEVER auto-selects the skip-teammate-spawn option — it continues to chain through the full pipeline. Emit a one-line status update summarizing the plan (phase count, task count, any star-chamber findings that were integrated).
 
 ### 8. Task tracker selection
 
@@ -125,10 +132,30 @@ Update the map document to include the following frontmatter/header fields:
 **Research:** <research doc path>
 **Mode:** <--single | --parallel | --debate>
 **Autopilot:** <true | false>
+**Lean:** <true | false>
 **Branch:** <branch name>
+
+<!-- Under --lean, embed the research-summary block inline here. Fields per
+     skills/brains/references/research-summary-schema.md. Example:
+
+```yaml
+research-summary:
+  libraries-and-versions: |
+    - FastAPI 0.112
+    - SQLAlchemy 2.0
+  deprecated-apis-to-avoid: |
+    - SQLAlchemy 1.x Query API
+  codebase-patterns: |
+    - Repository pattern in src/repos/
+  prior-art: |
+    - ADR-003 (auth middleware refactor)
+  constraints: |
+    - MUST maintain Python 3.11 compatibility
+```
+-->
 ```
 
-The `Mode:` and `Autopilot:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single` or `/brains:implement --resume --autopilot`).
+The `Mode:`, `Autopilot:`, and `Lean:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, or `--lean`).
 
 ## Phase Transition
 

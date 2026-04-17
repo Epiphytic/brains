@@ -2,7 +2,7 @@
 name: implement
 description: This skill should be used when the user asks to "implement the plan", "execute the plan", "start implementation", "build the tasks", "run the teammates", or invokes "/brains:implement". Phase 3 of the BRAINS pipeline: spawns a teammate Claude Code instance per plan-phase via agent-teams (preferred) or tmux (fallback), waits on beads state, handles task failures with two-strike-plus-human-in-loop flow. Supports --single, --parallel (default), and --debate modes for nurture/secure review within each plan-phase, plus an optional --autopilot flag that runs hands-off across phases until a needs-human ticket or direct user intervention stops it. Also supports --resume to pick up after a pause.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--resume] [--slug <slug>]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--teammate-model <sonnet|opus|haiku>] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -26,7 +26,7 @@ Modes affect the nurture and secure subagents that run INSIDE each teammate, not
 | `--parallel` (default) | Nurture/secure findings reviewed by star-chamber |
 | `--debate` | Nurture/secure run as star-chamber debates |
 
-For `--parallel` and `--debate`, follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
+For `--parallel` and `--debate`, follow `$BRAINS_PATH/references/multi-llm-protocol.md`. Under `--lean`, follow the compact excerpt at `$BRAINS_PATH/references/multi-llm-protocol-compact.md`; consult the full file only for debate-round synthesis or error handling.
 
 ## Autopilot (`--autopilot`)
 
@@ -47,7 +47,39 @@ Autopilot state is persisted in the plan header (`Autopilot: true`) and read by 
 
 ### 1. Parse arguments
 
-Parse mode, `--autopilot`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+Parse mode, `--autopilot`, `--lean`, `--teammate-model <sonnet|opus|haiku>`, `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+
+`--lean` activates the token-efficiency path: teammates receive only `skills/implement/teammate.md` (not the full master skill body); the compact multi-llm-protocol excerpt is inlined rather than read from the full reference; `failure-recovery.md` is lazy-loaded on first task failure; role-scoped context is loaded per `$BRAINS_PATH/manifests/master-implement.md`, `manifests/teammate.md`, `manifests/nurture.md`, and `manifests/secure.md`. Default off (byte-identical to prior behavior).
+
+`--teammate-model <sonnet|opus|haiku>` selects the model used to spawn per-phase teammate Claude Code instances AND their internal subagents (grooming, implementation, nurture, secure). Star-chamber invocations are unaffected — they run through `uvx star-chamber` with their own provider configuration.
+
+**Escalate-on-retry** is ON BY DEFAULT: a teammate task that has failed twice on the teammate model is retried a third time on the orchestrator model before `brains:needs-human` is applied. Pass `--no-escalate-on-retry` to disable. The default is configurable via `settings.local.json` key `brains.escalateOnRetry` (boolean; default `true`); a CLI `--no-escalate-on-retry` flag overrides the setting for that invocation.
+
+`--ignore-model-hints` (default off): disregard `model-hint: prefer-opus` fields in beads issue records. Without this flag, tasks flagged `prefer-opus` by grooming escalate to the orchestrator model even if the user selected a lower tier for general teammate work.
+
+### 1b. Resolve teammate model (Opus-detection prompt)
+
+Detect the orchestrator model (the model currently running `/brains:implement`). Family-string match on the model ID:
+
+```bash
+case "${CLAUDE_MODEL_ID:-}" in
+  claude-opus-*) ORCH_TIER=opus ;;
+  claude-sonnet-*) ORCH_TIER=sonnet ;;
+  claude-haiku-*) ORCH_TIER=haiku ;;
+  *) ORCH_TIER=unknown ;;
+esac
+```
+
+If `--teammate-model` was passed, honor it verbatim — skip the prompt.
+
+Otherwise:
+- **Orchestrator is Opus AND not `--autopilot`:** prompt the user: *"Orchestrator is Opus. Spawn teammates using Sonnet to reduce cost? [Y/n]"* (default Y). Store the answer as `TEAMMATE_MODEL`.
+- **Orchestrator is Opus AND `--autopilot`:** auto-select Sonnet without prompting. Emit a one-line status update: *"Opus orchestrator detected; spawning teammates on Sonnet (override with --teammate-model)."*
+- **Orchestrator is Sonnet or Haiku (any mode):** default `TEAMMATE_MODEL` to the orchestrator tier. No prompt.
+
+`TEAMMATE_MODEL` is propagated to step 5a teammate spawns (as `--model` to the Claude Code CLI for tmux mode, or as the `model` field in the agent-teams teammate spec) AND to internal subagent invocations inside the teammate (grooming, implementation, nurture, secure subagents).
+
+Model-hint escalation within a teammate: when a task's beads record has `model-hint: prefer-opus` and `--ignore-model-hints` was not set, the teammate invokes the implementation subagent with `ORCH_TIER` (the orchestrator tier, typically Opus) instead of `TEAMMATE_MODEL` for that single task.
 
 ### 2. Load plan
 
@@ -158,66 +190,13 @@ Wrap-up structure:
 
 Summarize the wrap-up to the user and close any remaining teammate panes.
 
-## Process (Teammate-Side)
+## Teammate-Side Protocol
 
-Teammates read this section as part of their initial prompt.
-
-### T1. Read inputs
-
-Read the ADR paths, plan path, phase label, mode, and completion marker path from the initial prompt.
-
-### T2. Grooming (single subagent)
-
-Query the task tracker for tasks matching `brains:topic:<slug>` + `brains:phase-<N>` + `brains:ready-for-grooming` (see `$BRAINS_PATH/references/beads-integration.md` § Task Queries).
-
-Spawn a single grooming subagent. Prompt:
-> "Groom these tasks for phase <N>: <task list>. For each task, research the codebase and external docs as needed. Flesh out the description, acceptance criteria, and implementation notes. If grooming surfaces new tasks in the same phase scope, add them to beads with labels `brains:topic:<slug>` + `brains:phase-<N>` + `brains:ready-for-grooming`. On completion, swap `brains:ready-for-grooming` for `brains:groomed` on each task."
-
-On grooming failure (3-strike): write `status=failed` to completion marker; halt.
-
-### T3. Execution (subagent preferred, not required)
-
-Iterate through groomed tasks in dependency order (beads' `ready` query returns unblocked tasks).
-
-**Dispatch preference:** spawning a fresh subagent (Agent tool) per task is the **preferred** pattern — it isolates context, keeps the teammate's main context clean, and makes per-task failure diagnostics easier. However, subagents are **not required**. When the task is small, tightly coupled to work the teammate just did, or benefits from the teammate's existing context (e.g., a one-line follow-up in a file it just modified), the teammate MAY implement the task directly without spawning a subagent. Pick the lighter-weight option that still leaves the failure/recovery flow auditable.
-
-For each task, regardless of dispatch choice:
-1. Gather the task description, relevant ADR excerpts, acceptance criteria, and recent commits list.
-2. Produce a diff or commits — either via subagent (preferred) or directly.
-3. On success: close the bead task. Continue.
-4. On failure: follow `$BRAINS_PATH/references/failure-recovery.md` § Task Failure Flow (Phase 3 Execution). Failure counting is per-task (not per-dispatch-mode) — two strikes total before `brains:needs-human`.
-
-### T4. Nurture (subagent, mode-aware)
-
-After all phase-<N> implementation tasks are closed (or at pause-timeout — nurture still runs on partial work), invoke `/brains:nurture --scope phase-<N>` as a subagent.
-
-Nurture is responsible for:
-- Committing any uncommitted code (atomic commits, conventional-commit messages)
-- Updating `.gitignore` for files that shouldn't be tracked
-- Reflecting half-complete state in docs if the phase ended early
-- Standard behaviors: bug review, test coverage checks, spec drift detection
-- Filing follow-up beads tasks labelled `brains:phase-<N+1>` or `brains:cleanup`
-
-Close the `Nurture: phase <N>` umbrella task on completion.
-
-### T5. Secure (subagent, mode-aware)
-
-Blocked on nurture completion. Invoke `/brains:secure --scope phase-<N>` as a subagent. Same pattern as nurture. Close the `Secure: phase <N>` umbrella task.
-
-### T6. Write completion marker
-
-Write the completion marker JSON file per `$BRAINS_PATH/references/teammate-protocol.md` § Completion Marker Format.
-
-## Task Failure Flow
-
-Follow `$BRAINS_PATH/references/failure-recovery.md` — entire file. Key points:
-- First failure → star-chamber re-groom → retry
-- Second failure → label `brains:needs-human` with metadata `needs-human-kind` = `failure` | `impossible` | `re-architecture`
-- User-response timeout → run nurture+secure on partial work, write paused.md, exit cleanly
-- Repeated needs-human cycles are allowed (no automatic limit)
+Teammates follow the protocol defined in `$BRAINS_PATH/skills/implement/teammate.md`. That file is included in the teammate's initial prompt. The master does not execute T1–T6; the master's job ends at spawning teammates and coordinating their completion.
 
 ## Additional Resources
 
+- **`$BRAINS_PATH/skills/implement/teammate.md`** — teammate-side protocol (T1–T6)
 - **`$BRAINS_PATH/references/teammate-protocol.md`** — spawn, sync, marker format
 - **`$BRAINS_PATH/references/beads-integration.md`** — task queries, label conventions, fallback
 - **`$BRAINS_PATH/references/failure-recovery.md`** — failure flow, needs-human variants, state machine

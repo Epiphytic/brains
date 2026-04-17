@@ -2,7 +2,7 @@
 name: brains
 description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes, and an optional --autopilot flag that auto-chains into hands-off map + implement. Chains into /brains:map at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--rounds N] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--rounds N] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, WebFetch, WebSearch, TaskCreate, TaskUpdate
 ---
 
@@ -24,7 +24,7 @@ BRAINS_PATH="<base directory from header>/../.."
 | `--parallel` (default) | Subagent + star-chamber; merge and de-duplicate | Star-chamber reviews after synthesis |
 | `--debate` | Subagent + star-chamber debate across rounds | Star-chamber debates across rounds |
 
-For `--parallel` and `--debate`, read and follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
+For `--parallel` and `--debate`, read and follow `$BRAINS_PATH/references/multi-llm-protocol.md`. Under `--lean`, read the compact excerpt at `$BRAINS_PATH/references/multi-llm-protocol-compact.md` instead; consult the full file only for debate-round synthesis, error handling, or unusual prerequisite failures.
 
 ## Hard Gate
 
@@ -34,9 +34,11 @@ Do NOT chain into `/brains:map` until an ADR has been written and the user has a
 
 ### 1. Parse arguments and derive topic
 
-Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--rounds N`, and the topic string. If no topic is provided, ask the user.
+Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--lean`, `--rounds N`, and the topic string. If no topic is provided, ask the user.
 
 `--autopilot` is an orthogonal flag that composes with any mode. When present, it does not change question-generation, synthesis, or review behavior — those still follow the selected mode. It only pre-selects **option 2** at the ADR gate (see step 9) and propagates to downstream phases.
+
+`--lean` is an orthogonal flag that composes with any mode and with `--autopilot`. When present, activate the token-efficiency path (see `$BRAINS_PATH/manifests/phase-1-brains.md` for the role manifest): use the compact multi-llm-protocol excerpt inline rather than reading the full reference; append a `Research-Summary` block to the plan header at step 2; otherwise behave identically. Default off (byte-identical to prior behavior). `--lean` propagates to downstream phases.
 
 ### 2. Initial research (subagent)
 
@@ -50,6 +52,8 @@ Output path: `docs/plans/YYYY-MM-DD-<slug>-research.md` (committed to git).
 
 If a research document from the same slug already exists and is younger than 24h, skip this step and reuse it.
 
+**Under `--lean`:** after writing the research document, produce a compact `research-summary` YAML block following the schema at `$BRAINS_PATH/skills/brains/references/research-summary-schema.md`. The block will be written into the plan header by `/brains:map` at phase-2 step 11; stash it alongside the research document output so phase 2 can embed it verbatim (path: `docs/plans/YYYY-MM-DD-<slug>-research-summary.yaml`, or inline in conversation state passed to the chained skill). All five fields (`libraries-and-versions`, `deprecated-apis-to-avoid`, `codebase-patterns`, `prior-art`, `constraints`) MUST be present. The full research document remains authoritative and on disk for drill-down.
+
 ### 3. Question generation (mode-dependent)
 
 You are aiming for generally 2-4 questions, each with explicit pros and cons, informed by the user's prompt and the research document from step 2. Each question should frame a real architectural choice — not a preference poll. Write pros and cons that would survive adversarial review.
@@ -60,7 +64,7 @@ Mode-specific procedure:
 - **`--parallel` (default):** spawn the subagent as in `--single` and concurrently invoke the star-chamber to produce its own candidate question set. Follow the parallel-mode protocol in `$BRAINS_PATH/references/multi-llm-protocol.md`. After both return, merge the two sets: de-duplicate semantically equivalent questions (not just string matches), keep the strongest framing and pro/con pairing for each, and drop questions that are strictly weaker variants.
 - **`--debate`:** spawn the subagent and star-chamber and run them across `--rounds N` (default 2) or until convergence, following the debate protocol in `$BRAINS_PATH/references/multi-llm-protocol.md`. Each round, both sides see the other's questions and critique / revise. Stop early if both sides converge on the same set.
 
-Present the final question set to the user before starting the questionnaire so they can reject or reorder.
+After merging (parallel) or converging (debate), proceed directly to the questionnaire in step 5 — do NOT present the question set for pre-approval. The per-question adaptive flow in step 5 provides course-correction; a separate approval gate is redundant by construction.
 
 ### 4. Offer visual companion (own message)
 
@@ -91,53 +95,7 @@ The review pass sits between synthesis and ADR generation. What happens here dep
 
 ### 8. ADR generation
 
-Produce one or more ADRs in `docs/adr/`. Filename format: `YYYY-MM-DD-NNN-<title>.md` where NNN is a globally sequential number (check `docs/adr/` for the next available number).
-
-ADR structure:
-
-```markdown
-# ADR-NNN: <Title>
-
-**Date:** YYYY-MM-DD
-**Status:** Accepted
-**Decision makers:** <user + providers consulted>
-
-## Context
-<Why this decision is needed>
-
-## Decision
-<Prose summary of what was decided — the high-level choice and its shape>
-
-## Requirements (RFC 2119)
-<Testable MUST/SHOULD/MAY statements derived from the decision>
-- The system MUST <requirement>.
-- The system SHOULD <requirement>.
-- The system MAY <requirement>.
-
-## Rationale
-<Why this option over alternatives>
-
-## Alternatives Considered
-### <Alternative 1>
-- Pros: ...
-- Cons: ...
-- Why rejected: ...
-
-## Assumed Versions (SHOULD)
-- <framework/lib>: X.Y — in whatever versioning scheme the library uses
-- <api>: X.Y
-
-## Diagram
-<mermaid block, if warranted: ≥3 components with ≥2 relationships, or ≥1 state machine>
-
-## Consequences
-<What changes as a result>
-
-## Council Input
-<Summary of star-chamber feedback, when applicable>
-```
-
-Use RFC 2119 MUST/MUST NOT/SHOULD/SHOULD NOT/MAY language in the Requirements section. Include a mermaid diagram if the ADR has three or more components with two or more relationships, or at least one state machine.
+Produce one or more ADRs in `docs/adr/` following the template and conventions in `$BRAINS_PATH/skills/brains/references/adr-template.md`. Filename format: `YYYY-MM-DD-NNN-<title>.md` (globally sequential NNN).
 
 ### 9. User gate
 
@@ -148,6 +106,7 @@ Present the ADR(s) to the user. If `--autopilot` was passed at skill launch, do 
 3. **Accept ADR(s), push to origin, and stop.** No further phases run.
 4. **Reject ADR(s) and stop.** Record the rejection reason (free-form); do not loop.
 5. **Provide fixes or alternate instructions.** User writes concrete edits or new guidance. Treat the text as input to a re-run of step 6 (architecture synthesis) and step 7 (architecture review) with the current ADR draft + user guidance appended to context. Re-present at this gate when the revised ADR is ready.
+6. **(Conditional) Accept ADR(s), push to origin, and skip to inline implementation** — available ONLY when the synthesized architecture flags all three: no new external dependencies, no new external services, single-component change. Offer this option only when all three flags are met. When accepted, the CURRENT session proceeds to implement the ADR inline without invoking `/brains:map` or `/brains:implement`. Use beads + TDD to track and execute tasks directly; spawn nurture + secure subagents at the end. Autopilot NEVER auto-selects this option.
 
 #### Handling options 1-3: commit and push
 
@@ -176,6 +135,17 @@ Write the rejection reason to `docs/plans/YYYY-MM-DD-<slug>-rejected.md` (single
 #### Handling option 5: user-provided fixes
 
 Capture the user's text verbatim. Append to context as `User-provided fixes:\n<text>` and re-run step 6 (synthesis) then step 7 (review), producing a revised ADR. Re-present the revised ADR at this gate.
+
+#### Handling option 6: skip to inline implementation
+
+Commit and push the ADR(s) as in options 1–3. Then implement the ADR inline in the current session:
+
+1. Create beads tasks from the ADR requirements (one task per MUST/SHOULD requirement, or aggregate related requirements into one task when cohesive). Label tasks with `brains:topic:<slug>` and `brains:phase-1`.
+2. Execute tasks directly using TDD where applicable. Do NOT spawn a teammate Claude Code instance.
+3. At the end, invoke `/brains:nurture --scope phase-1` and `/brains:secure --scope phase-1` as subagents for review and fixes.
+4. Commit changes with conventional-commit messages; do not push until nurture and secure pass.
+
+Eligibility is author-gated: surface the option only when the architecture flags all three prerequisites (no new external deps, no new external services, single-component change). If the user selects option 6 despite missing a prerequisite (e.g., by typing "6" explicitly), emit a warning and confirm once before proceeding.
 
 ## Phase Transition
 
