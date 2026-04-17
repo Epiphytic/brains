@@ -1,6 +1,6 @@
 {
   "name": "brains",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Brainstorm-to-implementation multi-LLM development workflow plugin — three-phase pipeline with teammate Claude Code instances, beads-based task tracking, and per-plan-phase nurture and secure review",
   "author": {
     "name": "Liam Helmer"

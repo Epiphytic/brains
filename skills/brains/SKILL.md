@@ -1,8 +1,8 @@
 ---
 name: brains
-description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes. Chains into /brains:map at the user gate.
+description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes, and an optional --autopilot flag that auto-chains into hands-off map + implement. Chains into /brains:map at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--rounds N] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--rounds N] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, WebFetch, WebSearch, TaskCreate, TaskUpdate
 ---
 
@@ -34,7 +34,9 @@ Do NOT chain into `/brains:map` until an ADR has been written and the user has a
 
 ### 1. Parse arguments and derive topic
 
-Parse `--single` / `--parallel` / `--debate`, `--rounds N`, and the topic string. If no topic is provided, ask the user.
+Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--rounds N`, and the topic string. If no topic is provided, ask the user.
+
+`--autopilot` is an orthogonal flag that composes with any mode. When present, it does not change question-generation, synthesis, or review behavior — those still follow the selected mode. It only pre-selects **option 2** at the ADR gate (see step 9) and propagates to downstream phases.
 
 ### 2. Initial research (subagent)
 
@@ -139,18 +141,51 @@ Use RFC 2119 MUST/MUST NOT/SHOULD/SHOULD NOT/MAY language in the Requirements se
 
 ### 9. User gate
 
-Present the ADR(s) to the user. Options:
+Present the ADR(s) to the user. If `--autopilot` was passed at skill launch, do NOT prompt — auto-select option 2 and proceed. Otherwise prompt the user to choose exactly one of:
 
-- **Accept:** ask "Implement this ADR? [y/n]" — on yes, chain into `/brains:map` with the same mode flag.
-- **Reject:** collect the rejection reason as free-form text. Loop back to step 3 with the rejected ADR and rejection reason added to question-generation context. Reuse the initial research document from step 2.
+1. **Accept ADR(s), push to origin, and chain into `/brains:map`** (planning mode) with the inherited mode flag.
+2. **Accept ADR(s), push to origin, and chain into `/brains:map --autopilot`** (hands-off planning + implementation) with the inherited mode flag.
+3. **Accept ADR(s), push to origin, and stop.** No further phases run.
+4. **Reject ADR(s) and stop.** Record the rejection reason (free-form); do not loop.
+5. **Provide fixes or alternate instructions.** User writes concrete edits or new guidance. Treat the text as input to a re-run of step 6 (architecture synthesis) and step 7 (architecture review) with the current ADR draft + user guidance appended to context. Re-present at this gate when the revised ADR is ready.
+
+#### Handling options 1-3: commit and push
+
+Before chaining (options 1/2) or stopping (option 3), commit the newly produced ADR files (and the research document from step 2 if not already committed) and push to origin. Use conventional-commit prefix `docs(adr):`.
+
+```bash
+# Stage and commit (files listed explicitly — never `git add .`)
+git add docs/adr/YYYY-MM-DD-NNN-<slug>.md
+[[ -f docs/plans/YYYY-MM-DD-<slug>-research.md ]] && git add docs/plans/YYYY-MM-DD-<slug>-research.md
+git commit -m "docs(adr): add ADR-NNN <title>"
+
+# Push — set upstream if the branch has none
+if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  git push
+else
+  git push -u origin "$(git branch --show-current)"
+fi
+```
+
+If the push fails (auth, protected branch, network), surface the error to the user. Do NOT bypass hooks or force-push. Offer: (a) retry after the user resolves the issue, (b) skip push and continue locally (options 1/2 still chain; option 3 still stops), (c) abort.
+
+#### Handling option 4: terminal rejection
+
+Write the rejection reason to `docs/plans/YYYY-MM-DD-<slug>-rejected.md` (single-paragraph note), then stop. Do not commit.
+
+#### Handling option 5: user-provided fixes
+
+Capture the user's text verbatim. Append to context as `User-provided fixes:\n<text>` and re-run step 6 (synthesis) then step 7 (review), producing a revised ADR. Re-present the revised ADR at this gate.
 
 ## Phase Transition
 
-After the ADR is accepted and the user elects to implement:
+After the ADR is accepted (option 1 or 2) and the commit+push succeeds:
 
-> "Phase 1 complete. ADR(s) committed to `docs/adr/`. Chaining into phase 2 (`/brains:map`) with mode `<mode>`."
-
-Invoke `/brains:map` directly — do not wait for further user input.
+- **Option 1:** > "Phase 1 complete. ADR(s) pushed to origin. Chaining into phase 2 (`/brains:map`) with mode `<mode>`."
+  Invoke `/brains:map` directly — do not wait for further user input.
+- **Option 2:** > "Phase 1 complete. ADR(s) pushed to origin. Chaining into phase 2 (`/brains:map --autopilot`) with mode `<mode>`."
+  Invoke `/brains:map --autopilot` directly — subsequent phases will not prompt the user unless a `brains:needs-human` escalation surfaces.
+- **Option 3:** > "Phase 1 complete. ADR(s) pushed to origin. Stopping — invoke `/brains:map` when ready to plan."
 
 ## Additional Resources
 

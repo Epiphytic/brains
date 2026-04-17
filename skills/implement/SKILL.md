@@ -1,8 +1,8 @@
 ---
 name: implement
-description: This skill should be used when the user asks to "implement the plan", "execute the plan", "start implementation", "build the tasks", "run the teammates", or invokes "/brains:implement". Phase 3 of the BRAINS pipeline: spawns a teammate Claude Code instance per plan-phase via agent-teams (preferred) or tmux (fallback), waits on beads state, handles task failures with two-strike-plus-human-in-loop flow. Supports --single, --parallel (default), and --debate modes for nurture/secure review within each plan-phase. Also supports --resume to pick up after a pause.
+description: This skill should be used when the user asks to "implement the plan", "execute the plan", "start implementation", "build the tasks", "run the teammates", or invokes "/brains:implement". Phase 3 of the BRAINS pipeline: spawns a teammate Claude Code instance per plan-phase via agent-teams (preferred) or tmux (fallback), waits on beads state, handles task failures with two-strike-plus-human-in-loop flow. Supports --single, --parallel (default), and --debate modes for nurture/secure review within each plan-phase, plus an optional --autopilot flag that runs hands-off across phases until a needs-human ticket or direct user intervention stops it. Also supports --resume to pick up after a pause.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--resume] [--slug <slug>]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--resume] [--slug <slug>]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -28,17 +28,33 @@ Modes affect the nurture and secure subagents that run INSIDE each teammate, not
 
 For `--parallel` and `--debate`, follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
 
+## Autopilot (`--autopilot`)
+
+Orthogonal flag that composes with any mode. Implementation still follows the standard teammate flow; autopilot only changes master's interaction posture:
+
+- **Start immediately.** Do not prompt for confirmation before launching the first teammate. If chained from `/brains:map --autopilot`, state is inherited.
+- **No per-phase confirmation.** Advance from plan-phase N to N+1 automatically once N's completion marker reports `complete`.
+- **Only stop when one of these happens:**
+  1. The user intervenes (cancels, types `stop`, or sends new instructions).
+  2. A `brains:needs-human` task surfaces from a teammate — master pauses and runs the normal needs-human questionnaire flow (see `$BRAINS_PATH/references/failure-recovery.md` § Needs-Human Variants).
+  3. All phases complete (natural end).
+- **User-response timeout still applies.** If the user does not answer a `needs-human` questionnaire within the configured timeout, master writes `paused.md` and exits as usual. Resuming with `/brains:implement --resume --autopilot` continues in autopilot.
+- **Prerequisite failures still stop.** Missing spawn backend (tmux + agent-teams both unavailable) or an unreachable task tracker is a hard stop; autopilot does not suppress these.
+
+Autopilot state is persisted in the plan header (`Autopilot: true`) and read by `--resume`. CLI `--autopilot` / absence-of-flag on resume overrides the persisted value.
+
 ## Process (Master-Side)
 
 ### 1. Parse arguments
 
-Parse mode, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+Parse mode, `--autopilot`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
 
 ### 2. Load plan
 
 Read the plan document. Extract:
 - Slug
 - Mode (may be overridden by CLI arg)
+- Autopilot (may be overridden by CLI arg — presence of `--autopilot` flag sets true; absence on `--resume` keeps the persisted value)
 - Branch (warn if current branch differs)
 - Plan-phases (enumerate via `brains:phase-*` labels filtered by `brains:topic:<slug>`)
 
@@ -94,6 +110,8 @@ In agent-teams mode, `TeammateIdle` notifications arrive automatically; still po
 #### 5c. Handle needs-human
 
 When a task acquires the `brains:needs-human` label, dispatch to the handler per `$BRAINS_PATH/references/failure-recovery.md` § Needs-Human Variants. Each variant has its own questionnaire prompt.
+
+In autopilot, a surfaced `brains:needs-human` is one of the three explicit stop conditions. Master still runs the questionnaire flow — autopilot does not suppress the prompt — and resumes autopilot behavior after the user responds.
 
 #### 5d. User-response timeout
 
@@ -157,15 +175,17 @@ Spawn a single grooming subagent. Prompt:
 
 On grooming failure (3-strike): write `status=failed` to completion marker; halt.
 
-### T3. Execution (fresh subagent per task)
+### T3. Execution (subagent preferred, not required)
 
-Iterate through groomed tasks in dependency order (beads' `ready` query returns unblocked tasks):
+Iterate through groomed tasks in dependency order (beads' `ready` query returns unblocked tasks).
 
-For each task:
-1. Spawn a fresh subagent (Agent tool) with the task description, relevant ADR excerpts, acceptance criteria, and recent commits list.
-2. Subagent returns a diff or produces commits.
+**Dispatch preference:** spawning a fresh subagent (Agent tool) per task is the **preferred** pattern — it isolates context, keeps the teammate's main context clean, and makes per-task failure diagnostics easier. However, subagents are **not required**. When the task is small, tightly coupled to work the teammate just did, or benefits from the teammate's existing context (e.g., a one-line follow-up in a file it just modified), the teammate MAY implement the task directly without spawning a subagent. Pick the lighter-weight option that still leaves the failure/recovery flow auditable.
+
+For each task, regardless of dispatch choice:
+1. Gather the task description, relevant ADR excerpts, acceptance criteria, and recent commits list.
+2. Produce a diff or commits — either via subagent (preferred) or directly.
 3. On success: close the bead task. Continue.
-4. On failure: follow `$BRAINS_PATH/references/failure-recovery.md` § Task Failure Flow (Phase 3 Execution).
+4. On failure: follow `$BRAINS_PATH/references/failure-recovery.md` § Task Failure Flow (Phase 3 Execution). Failure counting is per-task (not per-dispatch-mode) — two strikes total before `brains:needs-human`.
 
 ### T4. Nurture (subagent, mode-aware)
 

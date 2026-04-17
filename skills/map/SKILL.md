@@ -1,8 +1,8 @@
 ---
 name: map
-description: This skill should be used when the user asks to "map out the plan", "create the implementation plan", "outline the tasks", "plan it out", "sketch the implementation", or invokes "/brains:map". Phase 2 of the BRAINS pipeline: high-level plan generation (no implementation specifics), topic-slug derivation, optional branch creation, beads task creation with brains:-prefixed labels, and user approval gate. Supports --single, --parallel (default), and --debate modes for plan review. Chains into /brains:implement at the user gate.
+description: This skill should be used when the user asks to "map out the plan", "create the implementation plan", "outline the tasks", "plan it out", "sketch the implementation", or invokes "/brains:map". Phase 2 of the BRAINS pipeline: high-level plan generation (no implementation specifics), topic-slug derivation, optional branch creation, beads task creation with brains:-prefixed labels, and user approval gate. Supports --single, --parallel (default), and --debate modes for plan review, plus an optional --autopilot flag that skips user gates and auto-chains into /brains:implement --autopilot. Chains into /brains:implement at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--rounds N] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--rounds N] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -26,11 +26,24 @@ BRAINS_PATH="<base directory from header>/../.."
 
 For `--parallel` and `--debate`, follow `$BRAINS_PATH/references/multi-llm-protocol.md`.
 
+## Autopilot (`--autopilot`)
+
+Orthogonal flag that composes with any mode. When set:
+
+- **Skip all user prompts** — no branch prompt (step 3), no plan-acceptance gate (step 7).
+- **Star-chamber still runs per mode** (`--parallel` reviews, `--debate` debates); feedback is **auto-integrated into the plan** without a user confirmation step. Think of this as "fix anything that needs fixing" — actionable findings get applied; items requiring a true architectural judgment call should be surfaced by escalating that plan-phase's tasks to `brains:needs-human` during phase 3 rather than blocking here.
+- **Branch offer becomes automatic:** on a base branch, create `brains/<slug>` without asking; otherwise stay on the current branch (same as non-autopilot behavior).
+- **Chain into `/brains:implement --autopilot`** with inherited mode at the phase transition — do not prompt.
+
+Autopilot is propagated downstream — the inherited state is persisted in the plan header (see step 11) and honored by `/brains:implement --resume`.
+
 ## Process
 
 ### 1. Parse arguments
 
-Parse mode, rounds, and topic. If no topic and no prior phase 1 output exists, ask the user. If chained from phase 1, inherit the mode.
+Parse mode, `--autopilot`, rounds, and topic. If no topic and no prior phase 1 output exists, ask the user. If chained from phase 1, inherit both the mode and autopilot state.
+
+In autopilot, if a topic is truly missing and no prior phase 1 output exists, do NOT stall waiting for input — stop with a `brains:needs-human` style message to the user explaining that `/brains:map --autopilot` requires either a topic argument or a prior phase 1 output.
 
 ### 2. Derive topic slug
 
@@ -46,8 +59,10 @@ CURRENT_BRANCH=$(git branch --show-current)
 
 Base branches (configurable via `settings.local.json` key `brains.baseBranches`, default `main`, `master`, `develop`):
 
-- If `CURRENT_BRANCH` is a base branch: prompt *"Create topic branch `brains/<slug>` and switch to it? [y/n]"* — on yes, `git checkout -b brains/<slug>`; on no, continue on current branch with a one-line warning that BRAINS tasks will be labelled with the current branch name.
-- Otherwise: use the current branch without prompting.
+- If `CURRENT_BRANCH` is a base branch:
+  - **Interactive:** prompt *"Create topic branch `brains/<slug>` and switch to it? [y/n]"* — on yes, `git checkout -b brains/<slug>`; on no, continue on current branch with a one-line warning that BRAINS tasks will be labelled with the current branch name.
+  - **Autopilot:** skip the prompt and auto-create `brains/<slug>` (`git checkout -b brains/<slug>`). Emit a one-line status update instead.
+- Otherwise: use the current branch without prompting (same in both modes).
 
 ### 4. Load inputs
 
@@ -75,11 +90,14 @@ Behavior depends on the selected mode:
 - **`--parallel` (default):** Invoke the star-chamber to review the plan in parallel. Reviewers focus on task ordering, sizing, coverage, and phasing; their feedback is integrated into a revised plan before presenting to the user. Follow the parallel protocol in `$BRAINS_PATH/references/multi-llm-protocol.md`.
 - **`--debate`:** Invoke the star-chamber to debate the plan across rounds. Reviewers challenge each other's positions on ordering, sizing, coverage, and phasing until consensus or the round limit is reached; the synthesized outcome is integrated into the plan. Follow the debate protocol in `$BRAINS_PATH/references/multi-llm-protocol.md`.
 
+In `--autopilot`, star-chamber feedback (when applicable) is integrated without a user confirmation step — apply actionable findings, and surface anything that looks like a genuine architectural re-think as a `brains:needs-human` task during phase 3 rather than blocking here.
+
 ### 7. User gate
 
-Present the plan. Options:
-- **Reject:** revise in place, re-present. Stay within phase 2.
-- **Accept:** proceed to task creation.
+- **Interactive:** Present the plan. Options:
+  - **Reject:** revise in place, re-present. Stay within phase 2.
+  - **Accept:** proceed to task creation.
+- **Autopilot:** skip the gate. Proceed directly to task creation. Emit a one-line status update summarizing the plan (phase count, task count, any star-chamber findings that were integrated).
 
 ### 8. Task tracker selection
 
@@ -106,18 +124,20 @@ Update the map document to include the following frontmatter/header fields:
 **ADRs:** <list of paths>
 **Research:** <research doc path>
 **Mode:** <--single | --parallel | --debate>
+**Autopilot:** <true | false>
 **Branch:** <branch name>
 ```
 
-The `Mode:` line is read by `/brains:implement --resume`. A CLI flag on `--resume` (e.g., `/brains:implement --resume --single`) overrides the persisted value for the resumed session.
+The `Mode:` and `Autopilot:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single` or `/brains:implement --resume --autopilot`).
 
 ## Phase Transition
 
 After tasks are created, chain into phase 3:
 
-> "Phase 2 complete. Plan at `<map path>`. <N> tasks created across <K> plan-phase(s). Chaining into `/brains:implement` with mode `<mode>`."
-
-Invoke `/brains:implement` directly.
+- **Interactive:** > "Phase 2 complete. Plan at `<map path>`. <N> tasks created across <K> plan-phase(s). Chaining into `/brains:implement` with mode `<mode>`."
+  Invoke `/brains:implement` directly.
+- **Autopilot:** > "Phase 2 complete. Plan at `<map path>`. <N> tasks created across <K> plan-phase(s). Chaining into `/brains:implement --autopilot` with mode `<mode>`."
+  Invoke `/brains:implement --autopilot` directly — phase 3 will not prompt the user unless a `brains:needs-human` task surfaces.
 
 ## Additional Resources
 
