@@ -22,7 +22,7 @@ Result: the plan that reaches coding agents carries the user's actual intent, no
 
 ## Just-in-time grooming
 
-<p align="center"><img src="../assets/why-brains/just-in-time-grooming.jpeg" alt="Zombie tending a plant and examining a shield with a magnifying glass — inspection right before use" width="380"></p>
+<p align="center"><img src="../assets/why-brains/just-in-time-grooming.jpeg" alt="Zombie brushing a dog's coat — grooming, done just before the task is executed" width="380"></p>
 
 Tasks are created in phase 2 as **stubs** — intentionally under-specified. Each phase 3 teammate runs a grooming pass on its own tasks *immediately before execution*, not upfront.
 
@@ -50,7 +50,7 @@ Sequential phases trade throughput for **predictability and low retry cost**. Ev
 
 ## Per-phase nurture and secure review
 
-<p align="center"><img src="../assets/why-brains/per-phase-nurture-secure.jpeg" alt="Zombie grooming a guard dog in front of a secured door — nurture and secure together" width="380"></p>
+<p align="center"><img src="../assets/why-brains/per-phase-nurture-secure.jpeg" alt="Zombie tending a plant (nurture) and inspecting a shield with a magnifying glass (secure)" width="380"></p>
 
 At the end of every plan-phase, two dedicated review passes run inside the teammate:
 
