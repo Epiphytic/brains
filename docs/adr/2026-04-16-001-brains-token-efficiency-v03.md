@@ -27,7 +27,7 @@ Ship BRAINS v0.3 with three coordinated changes and three workflow simplificatio
 
 1. **Hybrid compression with ADR carve-out** — cache byte-stable content (protocol reference, boilerplate), summarize size-variable artifacts (research document → structured summary block in plan header), split or lazy-load oversized references. ADRs are never compressed or summarized; they are always loaded whole in every consuming role's context.
 2. **Per-role manifests** — each actor in the pipeline (master-implement, teammate, nurture subagent, secure subagent, star-chamber-ask, star-chamber-review, phase-1-brains, phase-2-map) has a manifest declaring what it reads and in what form (full, compact-excerpt, lazy-on-demand, summary-with-drill-down, whole-always). Skills under `--lean` delegate context loading to the manifest. A static manifest-lint script verifies declared files exist and cross-references skill bodies for un-declared reads.
-3. **Teammate model tiering** — when the orchestrator is Opus, `/brains:implement` offers (and defaults to) spawning per-phase teammate Claude Code instances and their internal subagents using Sonnet. Flag: `--teammate-model=<sonnet|opus|haiku>`. Grooming subagents emit a `model-hint` field (`sonnet-fine` | `prefer-opus`) per task so teammates can escalate architecture-heavy tasks within the user's chosen default. `--escalate-on-retry` (default off) auto-promotes failed tasks to the orchestrator tier before `needs-human`.
+3. **Teammate model tiering** — when the orchestrator is Opus, `/brains:implement` offers (and defaults to) spawning per-phase teammate Claude Code instances and their internal subagents using Sonnet. Flag: `--teammate-model=<sonnet|opus|haiku>`. Grooming subagents emit a `model-hint` field (`sonnet-fine` | `prefer-opus`) per task so teammates can escalate architecture-heavy tasks within the user's chosen default. Escalate-on-retry is ON BY DEFAULT: failed tasks auto-promote to the orchestrator tier for a third attempt before `needs-human`. Disable with `--no-escalate-on-retry` or `brains.escalateOnRetry=false`.
 
 **Workflow simplifications (not gated by `--lean`; apply in all modes):**
 
@@ -74,7 +74,7 @@ Ship BRAINS v0.3 with three coordinated changes and three workflow simplificatio
 - `--teammate-model=<sonnet|opus|haiku>` flag MUST be honored when present. When absent with a non-Opus orchestrator, the teammate model MUST default to the orchestrator model.
 - Teammates MUST propagate the chosen teammate-model to their internal subagents (grooming, nurture, secure, implementation). Star-chamber invocations MUST NOT be affected — they run through `uvx star-chamber` with their own provider configuration.
 - The grooming subagent MUST emit a `model-hint` field per task in the beads issue record: `sonnet-fine` or `prefer-opus`. The teammate MUST honor `prefer-opus` hints by spawning the task's implementation subagent with the orchestrator model, within the user's chosen default policy. `--ignore-model-hints` flag MUST opt out of this escalation.
-- `--escalate-on-retry` (default off) MUST promote a task that has failed twice on the teammate model to the orchestrator model for the third attempt before `needs-human` escalation.
+- Escalate-on-retry MUST be the default behavior in v0.3: a task that has failed twice on the teammate model MUST be retried a third time on the orchestrator model before `brains:needs-human` is applied. `--no-escalate-on-retry` MUST disable this behavior for a single invocation. The default MUST be overridable via `settings.local.json` key `brains.escalateOnRetry` (boolean; default `true`); a CLI `--no-escalate-on-retry` flag MUST override the setting for that invocation.
 
 ### Workflow simplifications
 
@@ -227,7 +227,7 @@ flowchart TB
 - Research-summary block schema enforced in plan header.
 - `--teammate-model` flag on `/brains:implement`; Sonnet default when orchestrator is Opus.
 - `model-hint` field in beads issue records.
-- `--escalate-on-retry` flag on `/brains:implement`.
+- Escalate-on-retry behavior (default ON) on `/brains:implement`; `--no-escalate-on-retry` CLI opt-out; `brains.escalateOnRetry` setting.
 - Question-set pre-approval step removed in `/brains:brains` (all modes).
 - Skip-to-implementation shortcut offered at phase-1 and phase-2 gates under strict eligibility.
 - Manifest-lint script added; runs in CI.
