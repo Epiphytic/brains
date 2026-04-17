@@ -4,6 +4,8 @@ The design rationale behind the three-phase pipeline, just-in-time grooming, per
 
 ## The underlying bet: alignment up front beats instruction volume later
 
+<p align="center"><img src="../assets/why-brains/alignment-up-front.jpeg" alt="Zombie drafting a plan at the base of a knowledge tree" width="380"></p>
+
 Humans are **unevenly good at giving context to LLMs.** Some prompts are crisp and surgical. Most aren't. And the dominant failure mode of agentic coding isn't "the LLM didn't try hard enough" — it's "the instructions didn't say what the user actually wanted, or left ambiguity that the LLM resolved in a direction the user didn't want." The agent then builds thousands of tokens' worth of wrong code, the user notices, the agent throws it away, and builds it again.
 
 Phase 1 (`/brains:brains`) is not a productivity tax. It is a **forced alignment exercise.** By requiring:
@@ -20,6 +22,8 @@ Result: the plan that reaches coding agents carries the user's actual intent, no
 
 ## Just-in-time grooming
 
+<p align="center"><img src="../assets/why-brains/just-in-time-grooming.jpeg" alt="Zombie tending a plant and examining a shield with a magnifying glass — inspection right before use" width="380"></p>
+
 Tasks are created in phase 2 as **stubs** — intentionally under-specified. Each phase 3 teammate runs a grooming pass on its own tasks *immediately before execution*, not upfront.
 
 Why this matters:
@@ -32,6 +36,8 @@ This is the opposite of the "plan the whole thing in detail up front" pattern. U
 
 ## Sequential phases avoid cross-phase rework
 
+<p align="center"><img src="../assets/why-brains/sequential-phases.jpeg" alt="Three zombies in sequence: digging, planting, watering" width="500"></p>
+
 Phases run in order, not in parallel, and each has a clear boundary.
 
 When phases overlap or run concurrently:
@@ -43,6 +49,8 @@ When phases overlap or run concurrently:
 Sequential phases trade throughput for **predictability and low retry cost**. Every phase starts with a fresh, committed baseline. Phase N+1 never has to guess what phase N was "about to" do.
 
 ## Per-phase nurture and secure review
+
+<p align="center"><img src="../assets/why-brains/per-phase-nurture-secure.jpeg" alt="Zombie grooming a guard dog in front of a secured door — nurture and secure together" width="380"></p>
 
 At the end of every plan-phase, two dedicated review passes run inside the teammate:
 
@@ -57,6 +65,8 @@ Why per-phase, not once at the end?
 
 ## Focused teammate context: ADR + this phase only
 
+<p align="center"><img src="../assets/why-brains/focused-teammate-context.jpeg" alt="Zombie in reading glasses holding a rune, surrounded by only a few code and task icons" width="380"></p>
+
 Each phase 3 teammate receives **only**:
 
 - The accepted ADR(s),
@@ -69,6 +79,8 @@ This is a deliberate **context budget.** A teammate staring at the whole plan is
 
 ## ADRs improve during the coding cycle
 
+<p align="center"><img src="../assets/why-brains/adrs-improve.jpeg" alt="Hard-hatted zombie revising a blueprint on a live construction site" width="380"></p>
+
 An ADR that survives contact with implementation unchanged is rare. BRAINS makes the feedback path explicit:
 
 - A teammate that hits an invalid ADR assumption files a task with `needs-human-kind=re-architecture`.
@@ -78,6 +90,8 @@ An ADR that survives contact with implementation unchanged is rare. BRAINS makes
 **ADRs are living artifacts**, not frozen decisions. This avoids the classic "we've committed to an architecture we know is wrong but we'll ride it out to avoid re-planning" death spiral. The cost of re-architecture is real, but almost always lower than the cost of continuing to build on a broken foundation.
 
 ## Star chamber at every decision point and whenever the LLM is stuck
+
+<p align="center"><img src="../assets/why-brains/star-chamber-decisions.jpeg" alt="Four zombies gathered around a glowing scrying orb in a starlit chamber" width="380"></p>
 
 The star chamber (multi-LLM council) is invoked at the points where single-model reasoning most often fails:
 
@@ -90,6 +104,8 @@ Why multiple models, not just one more careful prompt? Because single-model reas
 
 ## Fewer human-in-the-loop touchpoints
 
+<p align="center"><img src="../assets/why-brains/fewer-hitl-touchpoints.jpeg" alt="Zombie relaxing in a hammock with a drink while others build in the background" width="380"></p>
+
 The star chamber is deliberately inserted **before** the `brains:needs-human` escalation:
 
 - First task failure → star-chamber re-groom → retry. The human is not notified.
@@ -100,6 +116,8 @@ This means the user is interrupted only for problems that two independent LLMs c
 The net effect: less interrupt fatigue, higher signal per interruption, and faster resolution when human judgment genuinely is the bottleneck.
 
 ## Summary table
+
+<p align="center"><img src="../assets/why-brains/summary-table.jpeg" alt="Zombie beside a neatly organized gem grid summarizing everything" width="380"></p>
 
 | Design choice | What it prevents | How it saves tokens |
 |---|---|---|
@@ -113,6 +131,8 @@ The net effect: less interrupt fatigue, higher signal per interruption, and fast
 | Star chamber before human escalation | Interrupt fatigue, low-signal pages | Humans only see what two independent LLMs couldn't jointly solve |
 
 ## When BRAINS is not the right tool
+
+<p align="center"><img src="../assets/why-brains/wrong-tool.jpeg" alt="Zombie wielding an oversized battle-axe to deal with a single blueberry on a plate" width="380"></p>
 
 BRAINS is not faster for trivial tasks. Typo fixes, one-line config changes, and other work where the cost of rework is small don't benefit from three phases and multi-LLM review — the overhead dominates.
 
