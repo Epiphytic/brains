@@ -12,11 +12,13 @@ A structured, multi-LLM development workflow plugin for Claude Code. Guides comp
 
 BRAINS encodes a three-phase methodology for tackling complex software tasks:
 
-1. **brains** — Phase 1: interactive research, question-driven questionnaire, and RFC 2119 ADR production. Default mode: `--parallel` with star-chamber review.
+1. **brains** — Phase 1: interactive research, question-driven questionnaire, and RFC 2119 ADR production with auto-generated architecture diagrams. Default mode: `--parallel` with star-chamber review.
 2. **map** — Phase 2: high-level plan generation (stub-level, not implementation-specific), with beads-based task tracking using `brains:`-prefixed labels.
 3. **implement** — Phase 3: launches a fresh Claude Code teammate per plan-phase via agent-teams (preferred) or tmux. Each teammate grooms its tasks, executes them with fresh subagents, then runs nurture and secure reviews.
 
-Each phase chains into the next via a user-approval gate — or, with `--autopilot`, skips those gates and runs hands-off from phase 1 through phase 3, stopping only on a `brains:needs-human` escalation. The `nurture` and `secure` skills remain user-invocable for standalone use on any codebase.
+Each phase chains into the next via a user-approval gate — or, with `--autopilot`, skips those gates and runs hands-off from phase 1 through phase 3, stopping only on a `brains:needs-human` escalation. The `nurture`, `secure`, and `diagram` skills remain user-invocable for standalone use on any codebase.
+
+See [docs/diagrams.md](docs/diagrams.md) for rendered examples of the three diagram types (`flowchart`, `state`, `c4`) — including the pipeline itself as a flowchart and a C4 context diagram of the plugin's components.
 
 ## Prerequisites
 
@@ -36,7 +38,8 @@ Each phase chains into the next via a user-approval gate — or, with `--autopil
 - [beads](https://github.com/gastownhall/beads) — authoritative task tracker. Falls back to `TaskCreate` / `TaskUpdate` (tmux mode) or agent-teams' built-in task list (agent-teams mode) with degraded functionality.
 
 **Optional:**
-- [Node.js](https://nodejs.org/) — for the visual companion browser tool in phase 1
+- [Node.js](https://nodejs.org/) ≥ 18.19 — powers the BRAINS! visual companion server (phase 1) and the `mmdc` fallback renderer for `brains:diagram`.
+- [podman](https://podman.io/) or [Docker](https://www.docker.com/) — required for `/brains:setup --with-kroki`, which runs a local `yuzutech/kroki` container as the preferred diagram renderer. Without a local Kroki container, `brains:diagram` falls back to `mmdc`, and then to source-only.
 
 ## Installation
 
@@ -60,17 +63,26 @@ claude plugin marketplace add /path/to/brains
 claude plugin install brains@brains-marketplace
 ```
 
-After installing, run `/brains:setup --global` to install dependencies and configure LLM providers, then `/brains:setup --local` in each project for project-specific settings.
+After installing, run `/brains:setup --global` to install dependencies and configure LLM providers, then `/brains:setup --local` in each project for project-specific settings. Add `--with-kroki` to either invocation to pull and run a local Kroki container as the diagram renderer — undo later with `--without-kroki`.
+
+```bash
+/brains:setup --global                 # dependencies + providers + defaults
+/brains:setup --local                  # per-project settings and directories
+/brains:setup --with-kroki             # run yuzutech/kroki on 127.0.0.1 for diagram rendering
+/brains:setup --with-kroki --port 8000 # pin Kroki to a specific port
+/brains:setup --without-kroki          # stop and remove the local Kroki container
+```
 
 ## Skills
 
 | Skill | Command | Default Mode | Description |
 |-------|---------|:---:|-------------|
-| setup | `/brains:setup` | — | Install dependencies, configure LLM providers, set defaults |
+| setup | `/brains:setup` | — | Install dependencies, configure LLM providers, set defaults, optionally run local Kroki |
 | suggest | *(auto)* | — | Detects complex tasks and recommends BRAINS |
-| brains | `/brains:brains` | parallel | Phase 1: research + questionnaire + ADR |
+| brains | `/brains:brains` | parallel | Phase 1: research + questionnaire + ADR (with auto-diagram) |
 | map | `/brains:map` | parallel | Phase 2: high-level plan + beads tasks |
 | implement | `/brains:implement` | parallel | Phase 3: teammate-per-plan-phase execution |
+| diagram | `/brains:diagram` | — | Generate Mermaid diagrams (`flowchart`/`state`/`c4`) — auto-triggered by `brains:brains` or invoked standalone |
 | nurture | `/brains:nurture` | single | Review and refine (standalone or subagent) |
 | secure | `/brains:secure` | single | Security review (standalone or subagent) |
 
@@ -89,7 +101,7 @@ Additional flags:
 - `--rounds N` — number of debate rounds (default: 2, requires `--debate`).
 - `--autopilot` — orthogonal to mode; skips user gates and auto-chains phase 1 → 2 → 3. Star-chamber review still runs per selected mode and actionable feedback is auto-integrated; genuine architectural judgment calls surface as `brains:needs-human` tasks during phase 3. At the phase 1 ADR gate, `--autopilot` pre-selects *"accept ADR(s), push to origin, chain into `/brains:map --autopilot`"* (option 2 of 5). State is persisted in the plan header and honored by `/brains:implement --resume`.
 - `--lean` — orthogonal to mode and to `--autopilot`; activates the token-efficiency path introduced in v0.3. Uses a compact protocol excerpt in place of the full `multi-llm-protocol.md`, summarizes the research document via a structured `Research-Summary` block in the plan header (ADRs are ALWAYS delivered whole — never summarized), splits the `/brains:implement` skill so teammates load only the teammate-side protocol, lazy-loads `failure-recovery.md`, and scopes star-chamber context per call type. Each role loads only what its manifest in [`manifests/`](manifests/) declares. Default is off — behavior without `--lean` is byte-identical to v0.2.x. `--lean` inherits through phase chaining. Expected savings: ~30–45% of structural overhead per `--parallel --autopilot --lean` run.
-- `--teammate-model <sonnet|opus|haiku>` *(implement only)* — selects the model used to spawn per-phase teammate Claude Code instances AND their internal subagents (grooming, implementation, nurture, secure). When the orchestrator is Opus and this flag is absent, `/brains:implement` offers *"Spawn teammates using Sonnet to reduce cost? [Y/n]"* (default Y; auto-selected Y under `--autopilot`). Star-chamber invocations are unaffected.
+- `--teammate-model <sonnet|opus|haiku>` *(implement only)* — selects the model used to spawn per-phase teammate Claude Code instances AND their internal subagents (grooming, implementation, nurture, secure). When the orchestrator is Opus and this flag is absent, `/brains:implement` offers *"Spawn teammates using Sonnet to reduce cost? [Y/n]"* (default Y; auto-selected Y under `--autopilot`). Star-chamber invocations are unaffected. Sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku` are accepted (last one wins). The resolved tier is written into the plan header as `Teammate-model:` and read by `/brains:implement --resume`; a pre-flight summary (mode, autopilot, lean, orchestrator + teammate tier, escalation settings, phase/task counts) is displayed before any teammate is spawned — informational under `--autopilot`, `[Y/n]` confirm in interactive mode.
 - `--no-escalate-on-retry` *(implement only)* — disable escalation-on-retry (which is **on by default** in v0.3). With escalation on, a task that fails twice on the teammate model is retried a third time on the orchestrator model before the `brains:needs-human` label is applied. The default is configurable via `settings.local.json` key `brains.escalateOnRetry` (boolean; default `true`); the CLI flag overrides the setting.
 - `--ignore-model-hints` *(implement only)* — disregard `model-hint: prefer-opus` fields emitted by the grooming subagent. Without this flag, tasks flagged `prefer-opus` escalate to the orchestrator model for their implementation subagent even when a lower teammate tier is the default.
 
@@ -106,21 +118,79 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 /brains:brains "design a caching layer"                       # Uses default (parallel)
 /brains:brains --single "design a caching layer"              # Local only
 /brains:brains --debate --rounds 3 "design a caching layer"   # 3-round debate
+/brains:brains --max-diagrams 3 "design a caching layer"      # Allow up to 3 auto-diagrams in the ADR
+/brains:brains --diagram c4 "design a caching layer"          # Force a C4 context diagram
+/brains:brains --no-diagram "design a caching layer"          # Suppress auto-diagram generation
 /brains:map --parallel                                         # Phase 2 with parallel review
 /brains:implement --parallel                                   # Phase 3 with parallel review
 /brains:brains --autopilot "design a caching layer"           # Hands-off: phase 1 → 2 → 3
 /brains:brains --autopilot --lean "design a caching layer"    # Hands-off + token-efficiency path
-/brains:implement --teammate-model sonnet                     # Force Sonnet for teammate instances
+/brains:implement --teammate-sonnet                           # Sugar alias for --teammate-model sonnet
+/brains:implement --teammate-model opus                       # Keep teammates on Opus (no downgrade)
 /brains:implement --no-escalate-on-retry                      # Disable 3rd-retry-on-orchestrator
+/brains:diagram "component flow" --type flowchart             # Standalone diagram, attaches to latest ADR
 ```
 
 ## Phase Outputs
 
 | Phase | Output File | Additional |
 |-------|-------------|------------|
-| brains | `docs/plans/YYYY-MM-DD-<slug>-research.md` | ADRs in `docs/adr/` |
+| brains | `docs/plans/YYYY-MM-DD-<slug>-research.md` | ADRs in `docs/adr/` + auto-generated diagrams in `docs/adr/diagrams/` |
 | map | `docs/plans/YYYY-MM-DD-<slug>-map.md` | beads tasks with `brains:` labels |
 | implement | `docs/plans/YYYY-MM-DD-<slug>-phase-N-nurture.md`, `-phase-N-secure.md` per plan-phase | `docs/plans/<slug>-wrap-up.md` (or `-paused.md`) |
+
+## Diagramming (v0.4+)
+
+`brains:diagram` generates Mermaid diagrams from a natural-language description and stores source + rendered SVG side-by-side under `docs/adr/diagrams/`. The `.mmd` is canonical; the `.svg` is a derived artifact that can be regenerated any time from the source.
+
+| `--type` | Use for | Reserved for v0.5 |
+|---|---|---|
+| `flowchart` | Processes, control flow, pipelines | |
+| `state` | Lifecycles, state machines, transitions | |
+| `c4` | System context and container views | |
+| — | — | `sequence`, `er` |
+
+**How it's invoked:**
+
+- **Auto-triggered** by `/brains:brains` at ADR-write time. A heuristic picks up to `N` types (1–5, default 1) from the synthesized architecture and dispatches them. Disable per-run with `--no-diagram`; force a specific type with `--diagram <type>`; raise the cap with `--max-diagrams N`.
+- **Standalone** via `/brains:diagram "<description>" [--type <type>]`. If `--type` is omitted, the skill infers from keywords (`state`/`lifecycle` → state; `system context`/`container` → c4; otherwise flowchart).
+
+**Rendering priority** (first that answers wins — see [`skills/diagram/references/renderer-conventions.md`](skills/diagram/references/renderer-conventions.md) for the full contract):
+
+1. **Local Kroki** — `~/.config/brains/renderer.json` with a `kroki_url` pointing at `localhost`, `127.0.0.1`, `::1`, or a `.local` domain. Enabled by `/brains:setup --with-kroki`. URL scheme is validated (http/https only) and non-local hosts are rejected (SSRF prevention — diagram source is never sent to arbitrary hosts on this path).
+2. **`mmdc` via `npx`** — `npx -p @mermaid-js/mermaid-cli mmdc`. Requires Node.js ≥ 18.19. First run may download packages.
+3. **Source-only** — write `.mmd`, skip `.svg`, leave an HTML hint in the ADR explaining how to enable rendering.
+
+The public `https://kroki.io` cloud service is **never** used as an automatic fallback. `--kroki-cloud` opts into it for a single standalone invocation only, with an interactive consent prompt; it is disallowed in auto-trigger mode.
+
+**On-disk layout (example from this repo's own dogfooding):**
+
+```
+docs/adr/
+├── 2026-04-23-002-brains-diagramming.md
+└── diagrams/
+    ├── 2026-04-23-002-brains-diagramming-flowchart.mmd
+    └── 2026-04-23-002-brains-diagramming-flowchart.svg
+```
+
+ADRs embed the rendered image and include the Mermaid source in a `<details>` block, so the ADR stays readable in environments that don't render images.
+
+See [**docs/diagrams.md**](docs/diagrams.md) for full rendered examples of all three types.
+
+## Visual companion (BRAINS!)
+
+Phase 1 includes an optional browser-based companion — a local SSE + WebSocket server that serves HTML fragments for mockups, side-by-side comparisons, Mermaid diagrams, and the final ADR at the gate. Offered once per session; usage is per-question, not per-session (text questions stay in the terminal).
+
+Recent additions (v0.4):
+
+- **BRAINS! rebrand** — header, title, and loader link back to this repository.
+- **Live Mermaid rendering** — fragments can embed `<pre class="mermaid">` blocks; the frame renders them client-side via the Mermaid ESM CDN. Each block is wrapped in its own try/catch so a parse error on one diagram does not block the others.
+- **ADR gate view** — at the phase-1 gate, ADR markdown is rendered in-browser via `marked` + DOMPurify (with Mermaid per-block) while the user evaluates the gate options.
+- **Zombie working sprites** — `<div class="zombie-working" data-status="…">` animates three figures during processing (star-chamber, synthesis, ADR writing). Respects `prefers-reduced-motion`.
+- **BRAINS.gif loader** — shown between page loads.
+- **Configurable port** (v0.4.1) — default is a random ephemeral port (49152–65535). Override with `--port N` for a one-shot, or write `{"start_port": N}` to `~/.config/brains/companion.json` for a deterministic sequence (`N`, `N+1`, `N+2`, …, persisted in `$XDG_STATE_HOME/brains/companion-next-port.txt`). If a port is taken, the server retries up to 9 above it before exiting.
+
+Full guide: [`skills/brains/references/visual-companion.md`](skills/brains/references/visual-companion.md).
 
 ## Plugin Structure
 
@@ -128,15 +198,22 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 brains/
 ├── .claude-plugin/plugin.json
 ├── skills/
-│   ├── setup/
+│   ├── setup/                 (install deps, providers, defaults, Kroki lifecycle)
 │   ├── suggest/
-│   ├── brains/            (phase 1)
+│   ├── brains/                (phase 1 — research + questionnaire + ADR + auto-diagram)
 │   │   ├── references/
 │   │   │   └── visual-companion.md
-│   │   └── scripts/       (visual companion server)
-│   ├── map/               (phase 2)
+│   │   └── scripts/           (BRAINS! companion server)
+│   ├── map/                   (phase 2)
 │   │   └── references/plan-format.md
-│   ├── implement/         (phase 3)
+│   ├── implement/             (phase 3 — per-plan-phase teammates)
+│   ├── diagram/               (brains:diagram — Mermaid generation + rendering)
+│   │   └── references/
+│   │       ├── flowchart.md
+│   │       ├── state.md
+│   │       ├── c4.md
+│   │       ├── renderer-conventions.md
+│   │       └── storage-conventions.md
 │   ├── nurture/
 │   └── secure/
 ├── references/
@@ -151,6 +228,10 @@ brains/
 ├── docs/
 │   ├── testing-humans.md
 │   ├── testing-llm.md
+│   ├── why-brains.md
+│   ├── diagrams.md             (rendered examples of flowchart, state, c4)
+│   ├── diagrams/               (source + SVG for the examples on diagrams.md)
+│   ├── adr/                    (accepted ADRs; diagrams land in adr/diagrams/)
 │   └── plans/
 ├── LICENSE
 └── README.md

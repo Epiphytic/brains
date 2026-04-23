@@ -1,0 +1,26 @@
+%% Example C4 context diagram: BRAINS system boundary and external actors
+C4Context
+    title System Context: BRAINS Plugin
+
+    Person(dev, "Developer", "Runs /brains:* commands in Claude Code")
+
+    System_Boundary(brains, "BRAINS Plugin") {
+      System(orch, "Orchestrator", "Claude Code session running /brains:brains, /brains:map, /brains:implement")
+      System(teammate, "Teammate", "Per-phase Claude Code spawned via tmux or agent-teams")
+      System(companion, "BRAINS! Companion", "Local SSE server; mockups, ADR view, diagrams")
+      System(diagram, "brains:diagram", "Generates .mmd source + renders .svg")
+    }
+
+    System_Ext(starchamber, "star-chamber", "Multi-LLM council via uvx")
+    SystemDb_Ext(beads, "beads", "Task tracker (Dolt-backed)")
+    System_Ext(kroki, "Local Kroki", "yuzutech/kroki container on 127.0.0.1")
+    System_Ext(mmdc, "mmdc via npx", "Mermaid CLI fallback renderer")
+
+    Rel(dev, orch, "Invokes skills", "CLI")
+    Rel(dev, companion, "Views mockups + ADRs", "http://127.0.0.1:&lt;port&gt;")
+    Rel(orch, teammate, "Spawns per plan-phase", "tmux / agent-teams")
+    Rel(orch, starchamber, "Review / debate", "uvx")
+    Rel(teammate, beads, "Grooms, claims, closes", "bd CLI")
+    Rel(orch, diagram, "Auto-trigger in ADRs", "skill dispatch")
+    Rel(diagram, kroki, "POST /mermaid/svg", "HTTP (localhost only)")
+    Rel(diagram, mmdc, "Fallback render", "npx subprocess")

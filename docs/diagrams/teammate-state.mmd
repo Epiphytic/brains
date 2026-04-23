@@ -1,0 +1,15 @@
+%% Example state diagram: teammate task lifecycle in /brains:implement
+stateDiagram-v2
+    [*] --> Groom
+    Groom --> Ready : tasks groomed
+    Ready --> Implement : claim task
+    Implement --> Failing : test or lint failure
+    Failing --> Implement : retry (1 of 2 on teammate model)
+    Failing --> Escalated : escalate-on-retry
+    Escalated --> Implement : 3rd attempt on orchestrator model
+    Escalated --> NeedsHuman : 3rd attempt also fails
+    Implement --> Reviewed : tests + nurture + secure pass
+    NeedsHuman --> Reviewed : user resolves
+    Reviewed --> [*] : close task
+    NeedsHuman --> Paused : user-response timeout
+    Paused --> [*] : implement --resume
