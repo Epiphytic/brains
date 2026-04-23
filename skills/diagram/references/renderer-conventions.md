@@ -26,6 +26,8 @@ Attempt:
 npx -p @mermaid-js/mermaid-cli mmdc -i <input.mmd> -o <output.svg>
 ```
 
+Note: this fallback requires a working Node.js (≥18.19) and npm/npx toolchain and may download packages on first run (latency expected). In air-gapped or constrained environments, expect this to fail — source-only is the correct fallback there.
+
 If npx is not installed, the package download fails, or mmdc exits non-zero: fall through.
 
 ### 3. Source-only fallback
