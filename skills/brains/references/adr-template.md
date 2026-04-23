@@ -38,11 +38,10 @@ Use RFC 2119 MUST / MUST NOT / SHOULD / SHOULD NOT / MAY language in the Require
 
 ## Diagram
 
-<!-- condition: when SVG renderer was available, use the with-SVG variant below; otherwise use source-only -->
+<!-- brains:diagram populates this section. With SVG renderer: include the image line below. Without renderer: omit the image line and replace it with the renderer-unavailable HTML comment. The <details> block is always present. See skills/diagram/references/storage-conventions.md for exact formats. -->
 
-<!-- [WITH-SVG VARIANT] -->
-<!-- ![<type> diagram](diagrams/<adr-filename-stem>-<type>.svg) -->
-<!--
+![flowchart diagram](diagrams/<adr-filename-stem>-<type>.svg)
+
 <details><summary>Mermaid source</summary>
 
 ```mermaid
@@ -50,19 +49,6 @@ Use RFC 2119 MUST / MUST NOT / SHOULD / SHOULD NOT / MAY language in the Require
 ```
 
 </details>
--->
-
-<!-- [SOURCE-ONLY VARIANT] -->
-<!-- renderer unavailable; to enable SVG rendering, run /brains:setup --with-kroki or install @mermaid-js/mermaid-cli -->
-<!--
-<details><summary>Mermaid source</summary>
-
-```mermaid
-<mermaid source here>
-```
-
-</details>
--->
 
 ## Consequences
 <What changes as a result>

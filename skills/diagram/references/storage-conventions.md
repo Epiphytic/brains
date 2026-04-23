@@ -22,7 +22,7 @@ The `.mmd` source file is **canonical**. The `.svg` is a derived artifact and MA
 ```markdown
 ## Diagram
 
-![<type> diagram](diagrams/<stem>-<type>.svg)
+![flowchart diagram](diagrams/<stem>-flowchart.svg)
 
 <details><summary>Mermaid source</summary>
 
@@ -33,7 +33,7 @@ The `.mmd` source file is **canonical**. The `.svg` is a derived artifact and MA
 </details>
 ```
 
-The `<alt>` text for the image should be descriptive: e.g., `flowchart diagram`, `state machine diagram`, `C4 context diagram`.
+Use type-specific alt text: `flowchart diagram` for flowchart, `state machine diagram` for state, `C4 context diagram` for c4.
 
 The `<details>` block is always present — even when SVG exists — so the ADR is fully readable in environments that don't render images.
 
