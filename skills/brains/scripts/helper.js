@@ -14,6 +14,12 @@
     ws.onmessage = (msg) => {
       const data = JSON.parse(msg.data);
       if (data.type === 'reload') {
+        const loader = document.getElementById('brains-loader');
+        if (loader) {
+          const status = document.getElementById('loader-status');
+          if (status) status.textContent = 'Loading new screen...';
+          loader.classList.remove('hidden');
+        }
         window.location.reload();
       }
     };

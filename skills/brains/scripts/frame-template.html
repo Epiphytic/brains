@@ -192,9 +192,174 @@
     .mock-content { padding: 1.5rem; flex: 1; }
     .mock-button { background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; }
     .mock-input { background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; width: 100%; }
+
+    /* ===== BRAINS LOADER OVERLAY ===== */
+    #brains-loader {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.65);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+    }
+    #brains-loader.hidden { display: none; }
+    #brains-loader img {
+      max-width: min(480px, 90vw);
+      border-radius: 12px;
+    }
+    #loader-status {
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 500;
+      text-align: center;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    }
+
+    /* ===== ZOMBIE WORKING SPRITES (hand-authored, no external CDN) ===== */
+    /* Usage: <div class="zombie-working" data-status="Running star-chamber review..."></div> */
+    .zombie-working {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      position: relative;
+    }
+    .zombie-working::after {
+      content: attr(data-status);
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+    .zombie {
+      width: 40px;
+      height: 64px;
+      position: relative;
+      animation: zombie-sway 1.2s ease-in-out infinite alternate;
+    }
+    .zombie:nth-child(2) { animation-delay: 0.4s; }
+    .zombie:nth-child(3) { animation-delay: 0.8s; }
+    /* zombie body parts — hand-authored SVG via CSS shapes */
+    .zombie-head {
+      width: 18px; height: 18px;
+      background: #7ec87e;
+      border-radius: 4px 4px 2px 2px;
+      margin: 0 auto 2px;
+      position: relative;
+    }
+    .zombie-head::before { /* eyes */
+      content: '';
+      position: absolute;
+      top: 5px; left: 3px;
+      width: 4px; height: 4px;
+      background: #1a1a1a;
+      border-radius: 50%;
+      box-shadow: 7px 0 0 #1a1a1a;
+    }
+    .zombie-head::after { /* mouth */
+      content: '';
+      position: absolute;
+      bottom: 3px; left: 4px;
+      width: 10px; height: 2px;
+      background: #1a1a1a;
+      border-radius: 1px;
+    }
+    .zombie-body {
+      width: 20px; height: 22px;
+      background: #5a8a5a;
+      border-radius: 3px;
+      margin: 0 auto;
+    }
+    .zombie-arm {
+      position: absolute;
+      width: 8px; height: 14px;
+      background: #7ec87e;
+      border-radius: 3px;
+      top: 20px;
+      animation: zombie-arm-reach 0.9s ease-in-out infinite alternate;
+    }
+    .zombie-arm.left  { left: -6px; animation-delay: 0.15s; }
+    .zombie-arm.right { right: -6px; transform-origin: top center; animation: zombie-arm-reach-r 0.9s ease-in-out infinite alternate; animation-delay: 0.3s; }
+    .zombie-legs {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      margin-top: 2px;
+    }
+    .zombie-leg {
+      width: 8px; height: 20px;
+      background: #4a7a4a;
+      border-radius: 2px;
+      animation: zombie-leg-shuffle 1.2s ease-in-out infinite alternate;
+    }
+    .zombie-leg:last-child { animation-delay: 0.6s; }
+
+    @keyframes zombie-sway {
+      from { transform: rotate(-4deg); }
+      to   { transform: rotate(4deg); }
+    }
+    @keyframes zombie-arm-reach {
+      from { transform: rotate(-20deg); }
+      to   { transform: rotate(20deg); }
+    }
+    @keyframes zombie-arm-reach-r {
+      from { transform: rotate(20deg); }
+      to   { transform: rotate(-20deg); }
+    }
+    @keyframes zombie-leg-shuffle {
+      from { transform: translateY(0); }
+      to   { transform: translateY(-3px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .zombie, .zombie-arm, .zombie-arm.right, .zombie-leg {
+        animation: none;
+      }
+      #brains-loader img {
+        /* hide the animated gif; show static fallback text only */
+        display: none;
+      }
+    }
   </style>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default'
+    });
+  </script>
 </head>
 <body>
+  <!-- BRAINS loader: visible between fragments; helper.js hides it once content loads -->
+  <div id="brains-loader">
+    <img src="/assets/BRAINS.gif" alt="BRAINS! working..." width="480">
+    <p id="loader-status">Claude is thinking...</p>
+  </div>
+
+  <!-- zombie-working template: fragments may render <div class="zombie-working" data-status="..."> -->
+  <template id="zombie-tpl">
+    <div class="zombie">
+      <div class="zombie-head"></div>
+      <div style="position:relative">
+        <div class="zombie-body"></div>
+        <div class="zombie-arm left"></div>
+        <div class="zombie-arm right"></div>
+      </div>
+      <div class="zombie-legs">
+        <div class="zombie-leg"></div>
+        <div class="zombie-leg"></div>
+      </div>
+    </div>
+  </template>
+
   <div class="header">
     <h1><a href="https://github.com/Epiphytic/brains" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;">BRAINS!</a></h1>
     <div class="status">Connected</div>
@@ -210,5 +375,22 @@
     <span id="indicator-text">Click an option above, then return to the terminal</span>
   </div>
 
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      /* Hide the loading overlay once this page's content has rendered */
+      var loader = document.getElementById('brains-loader');
+      if (loader) loader.classList.add('hidden');
+
+      /* Populate .zombie-working containers with zombie sprites from template */
+      var tpl = document.getElementById('zombie-tpl');
+      if (tpl) {
+        document.querySelectorAll('.zombie-working').forEach(function(container) {
+          for (var i = 0; i < 3; i++) {
+            container.appendChild(tpl.content.cloneNode(true));
+          }
+        });
+      }
+    });
+  </script>
 </body>
 </html>
