@@ -61,3 +61,5 @@ The user MAY pass `--kroki-cloud` to opt into the public `https://kroki.io` clou
 ## renderer.json Write Contract
 
 `~/.config/brains/renderer.json` is written **only** by `brains:setup --with-kroki` and cleared **only** by `brains:setup --without-kroki`. This is a behavioral contract (spec-enforced, not sandbox-enforced). `brains:diagram` and all non-setup skills MUST NOT create, modify, or delete this file — reading `kroki_url` for renderer detection is the only permitted access.
+
+**Immutability rule:** `renderer.json` is exclusively managed by `brains:setup`. No other BRAINS skill — including `brains:diagram`, `brains:brains`, `brains:implement`, `brains:nurture`, and `brains:secure` — is permitted to write to or delete this file. Any skill that needs the `kroki_url` value reads the file; it never writes it.

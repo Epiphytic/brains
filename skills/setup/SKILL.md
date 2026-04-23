@@ -1,14 +1,16 @@
 ---
 name: setup
-description: This skill should be used when the user asks to "set up brains", "configure brains", "install brains dependencies", "set up multi-LLM", "configure star-chamber for brains", "change brains defaults", or invokes "/brains:setup". Guides the user through installing dependencies, configuring LLM providers, and setting default modes for each BRAINS skill.
+description: This skill should be used when the user asks to "set up brains", "configure brains", "install brains dependencies", "set up multi-LLM", "configure star-chamber for brains", "change brains defaults", "set up kroki", "enable diagram rendering", or invokes "/brains:setup". Guides the user through installing dependencies, configuring LLM providers, setting default modes for each BRAINS skill, and optionally starting a local Kroki container for diagram rendering.
 user-invocable: true
-argument-hint: "[--global|--local]"
+argument-hint: "[--global|--local] [--with-kroki [--port N]] [--without-kroki]"
 allowed-tools: Bash, Read, Write, Glob, Grep, Edit
 ---
 
 # Setup: Configure BRAINS
 
 Interactive setup wizard that installs dependencies, configures multi-LLM providers, and sets default modes for each BRAINS skill. Supports global (system-wide) and local (project-specific) configuration.
+
+An optional Kroki step (`--with-kroki`) pulls and runs the `yuzutech/kroki` container locally via podman or docker, making it the primary diagram renderer. This means `brains:diagram` renders SVGs locally without sending source to any external service — `mmdc` remains the fallback. Undo with `--without-kroki`. The `--kroki-cloud` opt-in for the public kroki.io service is a separate per-invocation flag on `brains:diagram` and is never an automatic fallback.
 
 Set the plugin base path:
 ```bash
@@ -327,12 +329,54 @@ grep -q 'brains.local.md' .gitignore 2>/dev/null && echo "PASS: gitignore" || ec
 echo "=== Done ==="
 ```
 
+## Kroki Container Setup
+
+### `--with-kroki [--port N]`
+
+Starts a local Kroki container. `brains:diagram` will use it as the primary renderer; `mmdc` remains the fallback. No diagram source is sent to external services.
+
+**Runtime detection:** `command -v podman` first; if absent, `command -v docker`. If neither is found, print an error to stderr and exit non-zero. Do NOT touch `~/.config/brains/renderer.json`.
+
+**Idempotency:** Run `<runtime> ps --all` and check for a container named `brains-kroki`. If it is already running, skip to writing `renderer.json`. If it exists but is stopped, remove it (`<runtime> rm brains-kroki`), then pull and run. If absent, pull and run directly.
+
+**Pull and run:** Parse `--port N` from arguments (default `8000`). Run:
+- `<runtime> pull yuzutech/kroki:latest`
+- `<runtime> run -d --name brains-kroki -p <PORT>:8000 --restart=unless-stopped yuzutech/kroki:latest`
+
+(The `--restart=unless-stopped` flag is identical for both podman and docker.)
+
+**Write `~/.config/brains/renderer.json`** with exactly these three fields:
+
+```json
+{
+  "kroki_url": "http://localhost:<PORT>",
+  "kroki_runtime": "podman|docker",
+  "kroki_started_at": "<UTC ISO-8601>"
+}
+```
+
+Use the Write tool. Substitute the actual PORT, RUNTIME (`podman` or `docker`), and current UTC timestamp.
+
+**Verify:** Check `<runtime> ps --filter name=brains-kroki` shows the container running and `~/.config/brains/renderer.json` exists.
+
+### `--without-kroki`
+
+No-op (exit 0) if `~/.config/brains/renderer.json` does not exist or contains no `kroki_*` keys.
+
+Otherwise:
+1. Read `kroki_runtime` from `renderer.json` to get the container runtime.
+2. Stop and remove the container: `<runtime> stop brains-kroki; <runtime> rm brains-kroki` (ignore errors if already gone).
+3. Remove all `kroki_*` keys (`kroki_url`, `kroki_runtime`, `kroki_started_at`) from `renderer.json`. Use the Read and Write tools — do not shell out to `jq`. If no keys remain, delete the file.
+4. Verify: `<runtime> ps --all` no longer lists `brains-kroki`; `renderer.json` contains no `kroki_url` key.
+
 ## Reconfiguration
 
 The setup skill can be re-run at any time to change settings:
 
 - `/brains:setup --global` — reconfigure providers, change global defaults
 - `/brains:setup --local` — change project-level overrides
+- `/brains:setup --with-kroki [--port N]` — start or restart local Kroki container
+- `/brains:setup --without-kroki` — stop and remove local Kroki container
 
 Existing settings are read and presented as current values. Only changed values are updated.
 
