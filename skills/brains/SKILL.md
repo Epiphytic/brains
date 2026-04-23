@@ -71,7 +71,7 @@ After merging (parallel) or converging (debate), proceed directly to the questio
 If any anticipated question would be clearer with a visual (layout comparison, state-machine mockup, component diagram), offer the browser-based visual companion in its own message. See `$BRAINS_PATH/skills/brains/references/visual-companion.md` for the detailed guide. This is a per-question tool, not a mode — accept once, then decide per-question whether to use terminal or browser.
 
 Offer prompt:
-> "Some of what we're working on might be easier to explain if I can show it to you in a web browser. I can put together mockups, diagrams, comparisons, and other visuals as we go. This feature is still new and can be token-intensive. Want to try it? (Requires opening a local URL)"
+> "Some of what we're working on might be easier to explain if I can show it to you in a web browser. I can put together mockups, architecture diagrams, comparisons, and other visuals as we go. This feature is still new and can be token-intensive. Want to try it? (Requires opening a local URL)"
 
 ### 5. Interactive questionnaire
 

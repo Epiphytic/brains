@@ -148,6 +148,52 @@ Interactions recorded to `$STATE_DIR/events` (one JSON object per line, cleared 
 
 Last `choice` event is typically the final selection. The click pattern may reveal hesitation worth asking about.
 
+## Diagram-Capable Fragments
+
+Fragments may include live-rendering content that the frame handles automatically.
+
+### Mermaid diagrams
+
+Embed Mermaid source in a `<pre class="mermaid">` block — the frame CDN renders it live client-side:
+
+```html
+<pre class="mermaid">
+flowchart TD
+  A[Brainstorm] --> B[Architecture Synthesis]
+  B --> C[ADR]
+</pre>
+```
+
+Mermaid rendering uses a per-block `try/catch`; a parse error on one block shows the raw source and error message in a red-bordered container without blocking other diagrams.
+
+### Zombie working sprites
+
+For screens where Claude is actively processing (star-chamber review, architecture synthesis, ADR writing), use the `.zombie-working` class with a `data-status` attribute describing the operation:
+
+```html
+<div class="zombie-working" data-status="Running star-chamber review..."></div>
+```
+
+The frame auto-populates three animated zombie figures and displays the status text below them. Animations respect `@media (prefers-reduced-motion: reduce)`.
+
+### ADR gate view
+
+At the phase-1 gate (step 9), push the ADR gate view to the companion using `renderADRView()`:
+
+```html
+<script>
+  window.renderADRView([
+    {
+      filename: '2026-04-23-002-brains-diagramming.md',
+      status: 'Accepted',
+      body: '# ADR-002: ...\n\n## Context\n...'
+    }
+  ]);
+</script>
+```
+
+The ADR view renders the filename, a color-coded status badge, and the full body as sanitized Markdown with live Mermaid diagram rendering. The view remains visible while the user evaluates gate options — do not push a waiting screen until after the user responds.
+
 ## Cleaning Up
 
 ```bash
