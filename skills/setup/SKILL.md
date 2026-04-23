@@ -19,9 +19,9 @@ BRAINS_PATH="<base directory from header>/../.."
 
 ## Scope
 
-The `--with-kroki` and `--without-kroki` flags are orthogonal to `--global`/`--local` — they may be run independently (e.g., `/brains:setup --with-kroki` without any global/local flag) or combined in one invocation (e.g., `/brains:setup --global --with-kroki`). When combined, run global/local setup first, then the Kroki step.
+The `--with-kroki` and `--without-kroki` flags are orthogonal to `--global`/`--local` — they may be run independently (e.g., `/brains:setup --with-kroki` without any global/local flag) or combined in one invocation (e.g., `/brains:setup --global --with-kroki`). When combined, run global/local setup first, then the Kroki step. **If only `--with-kroki` or `--without-kroki` is present (no `--global`/`--local`), skip the global/local scope prompt and go directly to the Kroki section.**
 
-Parse the `--global` or `--local` flag from arguments. If neither is provided, ask:
+Parse the `--global` or `--local` flag from arguments. If neither is provided AND no Kroki flag was given, ask:
 
 > "Should this setup apply globally (all projects) or locally (this project only)?
 >
@@ -340,17 +340,19 @@ Starts a local Kroki container. `brains:diagram` will use it as the primary rend
 **Runtime detection:** `command -v podman` first; if absent, `command -v docker`. If neither is found, print an error to stderr and exit non-zero. Do NOT touch `~/.config/brains/renderer.json`.
 
 **Idempotency:** Run `<runtime> ps --all` and check for a container named `brains-kroki`.
-- **Already running:** inspect its published port (`<runtime> inspect brains-kroki --format '{{(index (index .HostConfig.PortBindings "8000/tcp") 0).HostPort}}'`). If the port matches the requested `--port` (or default 8000), skip to writing `renderer.json`. If the port differs, stop and remove the container, then pull and run with the new port.
+- **Already running:** inspect its effective published port using `.NetworkSettings.Ports["8000/tcp"][0].HostPort` (more reliable across rootless modes than `.HostConfig.PortBindings`). If inspect returns empty, treat the port as unknown and recreate. If the port matches the requested `--port` (or default 8000), skip to writing `renderer.json`. If the port differs, stop and remove the container, then pull and run with the new port.
 - **Exists but stopped:** remove it (`<runtime> rm brains-kroki`), then pull and run.
 - **Absent:** pull and run directly.
 
-**Pull and run:** Parse `--port N` from arguments (default `8000`). Run:
+**Pull and run:** Parse `--port N` from arguments (default `8000`). **Validate PORT before use:** it must be a positive integer in the range 1–65535 (digits only, no shell metacharacters). If invalid, print an error and exit non-zero without touching the container or `renderer.json`. Run:
 - `<runtime> pull yuzutech/kroki:latest`
-- `<runtime> run -d --name brains-kroki -p <PORT>:8000 --restart=unless-stopped yuzutech/kroki:latest`
+- `<runtime> run -d --name brains-kroki -p 127.0.0.1:<PORT>:8000 --restart=unless-stopped yuzutech/kroki:latest`
+
+Bind to `127.0.0.1` explicitly so Kroki is only reachable on the local loopback interface, not exposed to the network.
 
 (The `--restart=unless-stopped` flag is identical for both podman and docker.)
 
-**Write `~/.config/brains/renderer.json`** — replace the file entirely with exactly these three fields (no merge, no extra fields):
+**Write `~/.config/brains/renderer.json` atomically** — replace the file entirely with exactly these three fields (no merge, no extra fields). Use Bash to write atomically: write to `~/.config/brains/renderer.json.tmp` first, then rename it into place with `mv ~/.config/brains/renderer.json.tmp ~/.config/brains/renderer.json`. Ensure `~/.config/brains/` exists first (`mkdir -p ~/.config/brains`).
 
 ```json
 {
@@ -360,7 +362,7 @@ Starts a local Kroki container. `brains:diagram` will use it as the primary rend
 }
 ```
 
-Use the Write tool. Substitute the actual PORT, RUNTIME (`podman` or `docker`), and current UTC timestamp in ISO-8601 format.
+Substitute the actual PORT, RUNTIME (`podman` or `docker`), and current UTC timestamp in ISO-8601 format.
 
 **Verify:** Check `<runtime> ps --filter name=brains-kroki` shows the container running and `~/.config/brains/renderer.json` exists.
 
@@ -369,10 +371,10 @@ Use the Write tool. Substitute the actual PORT, RUNTIME (`podman` or `docker`), 
 No-op (exit 0) if `~/.config/brains/renderer.json` does not exist or contains no `kroki_*` keys.
 
 Otherwise:
-1. Read `kroki_runtime` from `renderer.json`. If missing or not `podman`/`docker`, probe `podman` then `docker` for `brains-kroki` and use whichever finds it.
-2. Stop and remove the container: `<runtime> stop brains-kroki; <runtime> rm brains-kroki` (ignore errors if already gone).
-3. Remove all `kroki_*` keys (`kroki_url`, `kroki_runtime`, `kroki_started_at`) from `renderer.json` using the Read and Write tools — do not shell out to `jq`. If no keys remain, delete the file using Bash (`rm ~/.config/brains/renderer.json`).
-4. Verify: `<runtime> ps --all` no longer lists `brains-kroki`; `renderer.json` does not exist or contains no `kroki_url` key.
+1. Read `kroki_runtime` from `renderer.json`. If missing or not `podman`/`docker`, probe both `podman` and `docker` for `brains-kroki`. If found in both runtimes, clean up both (stop and remove in each). If found in neither, skip the container step and proceed to clean up `renderer.json`.
+2. Stop and remove the container(s): `<runtime> stop brains-kroki; <runtime> rm brains-kroki` (ignore errors if already gone).
+3. Remove all `kroki_*` keys (`kroki_url`, `kroki_runtime`, `kroki_started_at`) from `renderer.json` using the Read and Write tools — do not shell out to `jq`. If no keys remain, delete the file using Bash (`rm -f ~/.config/brains/renderer.json`).
+4. Verify: neither `podman` nor `docker` lists `brains-kroki`; `renderer.json` does not exist or contains no `kroki_url` key.
 
 ## Reconfiguration
 
