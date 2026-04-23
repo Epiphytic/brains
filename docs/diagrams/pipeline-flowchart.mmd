@@ -1,0 +1,17 @@
+%% Example flowchart: end-to-end BRAINS pipeline with autopilot chaining
+flowchart TD
+    Start([User: /brains:brains &lt;topic&gt;]) --> Research[Research subagent<br/>+ star-chamber]
+    Research --> Q{2-4 questions<br/>answered?}
+    Q -->|yes| Synth[Architecture synthesis<br/>+ review]
+    Synth --> Diag[brains:diagram<br/>auto-trigger]
+    Diag --> ADR[/ADR written to docs/adr/<br/>with embedded diagram/]
+    ADR --> Gate{Phase-1 gate}
+    Gate -->|option 2: autopilot| Map[/brains:map --autopilot/]
+    Gate -->|option 1| MapI[/brains:map interactive/]
+    Gate -->|option 6: inline| Inline[Inline implementation<br/>nurture + secure]
+    Map --> Plan[Plan + beads tasks]
+    MapI --> Plan
+    Plan --> Impl[/brains:implement/]
+    Impl --> Teammate[Per-phase teammate<br/>groom → implement → nurture → secure]
+    Teammate --> Done([Wrap-up])
+    Inline --> Done
