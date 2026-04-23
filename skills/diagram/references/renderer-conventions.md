@@ -8,6 +8,12 @@ Check renderers in this exact priority order. Stop at the first that succeeds.
 
 Check for `~/.config/brains/renderer.json`. If the file exists and contains a `kroki_url` field:
 
+**Validate `kroki_url` before use:**
+- Scheme MUST be `http` or `https`. Reject any other scheme.
+- Host MUST be a local address: `localhost`, `127.0.0.1`, `::1`, or a `.local` domain. Reject external hostnames (this prevents SSRF — diagram source must not be sent to arbitrary hosts via this path).
+- Strip any trailing `/` from `kroki_url` before appending `/mermaid/svg`.
+- If validation fails, fall through to the next renderer (do not abort; treat as unavailable).
+
 ```
 POST ${kroki_url}/mermaid/svg
 Content-Type: text/plain
@@ -16,7 +22,7 @@ Body: <mermaid source>
 
 A 200 response with SVG content means the renderer is available. Use this renderer.
 
-If the file is absent, `kroki_url` is missing, or the POST fails (connection refused, non-200): fall through to the next renderer.
+If the file is absent, `kroki_url` is missing, fails validation, or the POST fails (connection refused, non-200): fall through to the next renderer.
 
 ### 2. mmdc via npx (secondary)
 
@@ -47,10 +53,11 @@ Kroki.io (`https://kroki.io`) is an external cloud service. It MUST NOT be used 
 ## --kroki-cloud Explicit Consent Path
 
 The user MAY pass `--kroki-cloud` to opt into the public `https://kroki.io` cloud renderer. Requirements:
-- Requires explicit re-confirmation each invocation: prompt the user with "This will send your diagram source to https://kroki.io (an external cloud service). Confirm? [y/N]"
+- **DISALLOWED in auto-trigger mode.** When `brains:diagram` is invoked automatically from a workflow (ADR generation step 8), `--kroki-cloud` MUST be ignored and source-only fallback MUST be used. Interactive consent cannot be obtained in auto-trigger context.
+- In standalone mode: prompt the user with "This will send your diagram source to https://kroki.io (an external cloud service). Confirm? [y/N]"
 - If the user does not confirm, fall back to source-only.
 - MUST NOT be used as an automatic fallback under any circumstances.
 
-## renderer.json Immutability Rule
+## renderer.json Write Contract
 
-`~/.config/brains/renderer.json` is written **only** by `brains:setup --with-kroki` and deleted/cleared **only** by `brains:setup --without-kroki`. No other BRAINS skill reads or modifies this file except to read `kroki_url` for renderer detection. This file MUST NOT be created, modified, or deleted by `brains:diagram` or any other non-setup skill.
+`~/.config/brains/renderer.json` is written **only** by `brains:setup --with-kroki` and cleared **only** by `brains:setup --without-kroki`. This is a behavioral contract (spec-enforced, not sandbox-enforced). `brains:diagram` and all non-setup skills MUST NOT create, modify, or delete this file — reading `kroki_url` for renderer detection is the only permitted access.

@@ -13,6 +13,8 @@ Stem:         2026-04-23-002-brains-diagramming
 
 Derivation rule: strip the leading `docs/adr/` path and the trailing `.md` extension from the ADR filename. Append `-<type>` and the appropriate extension.
 
+**Stem sanitization (required):** Before constructing any output path, apply `basename` to the stem (remove any directory component). Reject stems containing `..`, `/`, or `\`. The resolved output path MUST start with `docs/adr/diagrams/` — never write diagram files outside this directory.
+
 The `.mmd` source file is **canonical**. The `.svg` is a derived artifact and MAY be regenerated at any time from the `.mmd`.
 
 ## ADR `## Diagram` Section Format
