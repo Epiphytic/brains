@@ -133,6 +133,7 @@ Update the map document to include the following frontmatter/header fields:
 **Mode:** <--single | --parallel | --debate>
 **Autopilot:** <true | false>
 **Lean:** <true | false>
+**Teammate-model:** <sonnet | opus | haiku | (unset — /brains:implement will resolve and write back)>
 **Branch:** <branch name>
 
 <!-- Under --lean, embed the research-summary block inline here. Fields per
@@ -155,7 +156,7 @@ research-summary:
 -->
 ```
 
-The `Mode:`, `Autopilot:`, and `Lean:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, or `--lean`).
+The `Mode:`, `Autopilot:`, `Lean:`, and `Teammate-model:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, `--lean`, `--teammate-model opus`, or the sugar aliases `--teammate-opus` / `--teammate-sonnet` / `--teammate-haiku`). On first phase-2 run, `Teammate-model:` MAY be left empty if the user has not chosen a tier; `/brains:implement` resolves the default per step 1b and writes the decision back to the plan header before launching the first teammate.
 
 ## Phase Transition
 
