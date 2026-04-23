@@ -2,7 +2,7 @@
 name: implement
 description: This skill should be used when the user asks to "implement the plan", "execute the plan", "start implementation", "build the tasks", "run the teammates", or invokes "/brains:implement". Phase 3 of the BRAINS pipeline: spawns a teammate Claude Code instance per plan-phase via agent-teams (preferred) or tmux (fallback), waits on beads state, handles task failures with two-strike-plus-human-in-loop flow. Supports --single, --parallel (default), and --debate modes for nurture/secure review within each plan-phase, plus an optional --autopilot flag that runs hands-off across phases until a needs-human ticket or direct user intervention stops it. Also supports --resume to pick up after a pause.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--teammate-model <sonnet|opus|haiku>] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--teammate-model <sonnet|opus|haiku> | --teammate-opus | --teammate-sonnet | --teammate-haiku] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -47,34 +47,49 @@ Autopilot state is persisted in the plan header (`Autopilot: true`) and read by 
 
 ### 1. Parse arguments
 
-Parse mode, `--autopilot`, `--lean`, `--teammate-model <sonnet|opus|haiku>`, `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+Parse mode, `--autopilot`, `--lean`, `--teammate-model <sonnet|opus|haiku>` (and sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku`), `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
 
 `--lean` activates the token-efficiency path: teammates receive only `skills/implement/teammate.md` (not the full master skill body); the compact multi-llm-protocol excerpt is inlined rather than read from the full reference; `failure-recovery.md` is lazy-loaded on first task failure; role-scoped context is loaded per `$BRAINS_PATH/manifests/master-implement.md`, `manifests/teammate.md`, `manifests/nurture.md`, and `manifests/secure.md`. Default off (byte-identical to prior behavior).
 
 `--teammate-model <sonnet|opus|haiku>` selects the model used to spawn per-phase teammate Claude Code instances AND their internal subagents (grooming, implementation, nurture, secure). Star-chamber invocations are unaffected — they run through `uvx star-chamber` with their own provider configuration.
 
+The sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku` are equivalent to `--teammate-model <tier>`. If more than one of these flags (including `--teammate-model`) is passed in the same invocation, the last one wins and a one-line warning is emitted.
+
 **Escalate-on-retry** is ON BY DEFAULT: a teammate task that has failed twice on the teammate model is retried a third time on the orchestrator model before `brains:needs-human` is applied. Pass `--no-escalate-on-retry` to disable. The default is configurable via `settings.local.json` key `brains.escalateOnRetry` (boolean; default `true`); a CLI `--no-escalate-on-retry` flag overrides the setting for that invocation.
 
 `--ignore-model-hints` (default off): disregard `model-hint: prefer-opus` fields in beads issue records. Without this flag, tasks flagged `prefer-opus` by grooming escalate to the orchestrator model even if the user selected a lower tier for general teammate work.
 
-### 1b. Resolve teammate model (Opus-detection prompt)
+### 1b. Resolve teammate model
 
-Detect the orchestrator model (the model currently running `/brains:implement`). Family-string match on the model ID:
+Detect the orchestrator tier (the model currently running `/brains:implement`). Try sources in order; use the first that returns a known tier:
 
 ```bash
-case "${CLAUDE_MODEL_ID:-}" in
-  claude-opus-*) ORCH_TIER=opus ;;
+# Source 1: CLAUDE_MODEL_ID env var (Claude Code sets this in recent versions)
+# Source 2: `claude --print-model-info` CLI output, if available
+# Source 3: plan-header override ORCH_TIER: <tier> (read in step 2 and plumbed back if needed)
+# Source 4: user settings ~/.claude/settings.json or .claude/settings.local.json key "model"
+MODEL_ID="${CLAUDE_MODEL_ID:-}"
+if [[ -z "$MODEL_ID" ]] && command -v claude >/dev/null 2>&1; then
+  MODEL_ID="$(claude --print-model-info 2>/dev/null | sed -n 's/^modelId: *//p')"
+fi
+case "$MODEL_ID" in
+  claude-opus-*)   ORCH_TIER=opus ;;
   claude-sonnet-*) ORCH_TIER=sonnet ;;
-  claude-haiku-*) ORCH_TIER=haiku ;;
-  *) ORCH_TIER=unknown ;;
+  claude-haiku-*)  ORCH_TIER=haiku ;;
+  *)               ORCH_TIER=unknown ;;
 esac
 ```
 
-If `--teammate-model` was passed, honor it verbatim — skip the prompt.
+When `ORCH_TIER=unknown`:
+- If `--teammate-model` (or a sugar alias) was passed, honor it and proceed.
+- Otherwise in **autopilot**: default `TEAMMATE_MODEL=sonnet` AND emit a warning line: *"Orchestrator tier could not be detected (CLAUDE_MODEL_ID unset, `claude --print-model-info` unavailable). Defaulting teammates to Sonnet; override with --teammate-model."*
+- Otherwise in **interactive** mode: prompt *"Orchestrator model could not be detected. Choose teammate model: sonnet / opus / haiku [sonnet]:"* and respect the answer.
+
+With a known `ORCH_TIER`, if `--teammate-model` / sugar alias was passed, honor it verbatim.
 
 Otherwise:
 - **Orchestrator is Opus AND not `--autopilot`:** prompt the user: *"Orchestrator is Opus. Spawn teammates using Sonnet to reduce cost? [Y/n]"* (default Y). Store the answer as `TEAMMATE_MODEL`.
-- **Orchestrator is Opus AND `--autopilot`:** auto-select Sonnet without prompting. Emit a one-line status update: *"Opus orchestrator detected; spawning teammates on Sonnet (override with --teammate-model)."*
+- **Orchestrator is Opus AND `--autopilot`:** auto-select Sonnet without prompting. The pre-flight summary block (step 3b below) surfaces this choice — a silent one-line status update is NOT sufficient.
 - **Orchestrator is Sonnet or Haiku (any mode):** default `TEAMMATE_MODEL` to the orchestrator tier. No prompt.
 
 `TEAMMATE_MODEL` is propagated to step 5a teammate spawns (as `--model` to the Claude Code CLI for tmux mode, or as the `model` field in the agent-teams teammate spec) AND to internal subagent invocations inside the teammate (grooming, implementation, nurture, secure subagents).
@@ -88,7 +103,10 @@ Read the plan document. Extract:
 - Mode (may be overridden by CLI arg)
 - Autopilot (may be overridden by CLI arg — presence of `--autopilot` flag sets true; absence on `--resume` keeps the persisted value)
 - Branch (warn if current branch differs)
+- **Teammate-model** (may be overridden by CLI arg — persisted value read on `--resume` so a run that explicitly picked Opus teammates doesn't silently fall back to the default on resume)
 - Plan-phases (enumerate via `brains:phase-*` labels filtered by `brains:topic:<slug>`)
+
+If the plan header does not yet contain a `Teammate-model:` field (older plans), resolve it via step 1b and write it back to the plan header before step 5 begins. The plan document IS authoritative for this field on subsequent resumes.
 
 ### 3. Prerequisite checks
 
@@ -108,6 +126,35 @@ fi
 ```
 
 Task tracker: follow `$BRAINS_PATH/references/beads-integration.md` § Tracker Selection.
+
+### 3b. Pre-flight summary (autopilot + interactive)
+
+Before spawning the first teammate, emit a prominent multi-line pre-flight summary block so the user can see — without scrolling or scanning a log — exactly what will run and at what cost tier. This block replaces the old one-line "Opus orchestrator detected; spawning teammates on Sonnet" status update.
+
+Template (customize counts per actual plan):
+
+```
+── BRAINS phase 3 pre-flight ──────────────────────────────────
+  Mode:              <--single|--parallel|--debate>
+  Autopilot:         <on|off> (<effect — e.g. "no per-phase prompts">)
+  Lean:              <on|off>
+  Orchestrator:      <opus|sonnet|haiku|unknown>
+  Teammate model:    <opus|sonnet|haiku> <← auto-selected for cost | from plan header | --teammate-model>
+  Subagent model:    <same as teammate> <(+escalation on model-hint: prefer-opus)>
+  Escalate-on-retry: <on|off> <(3rd failure retries on <orchestrator tier>)>
+  Ignore-model-hints: <on|off>
+  Plan-phases:       <N> plan-phases, <M> open implementation tasks
+  Umbrella tasks:    <N> nurture, <N> secure, <0|1> cleanup
+  Branch:            <current branch>
+  Override:          /brains:implement --teammate-model <other-tier> [--resume]
+───────────────────────────────────────────────────────────────
+```
+
+In **autopilot**, emit the block and proceed immediately — no confirmation prompt. The user can still cancel with Ctrl-C or `stop` during the autopilot loop.
+
+In **interactive** mode, emit the block and pause with a single prompt: *"Proceed with the above configuration? [Y/n]"*. On `n`, exit cleanly (no teammate is spawned); the user can re-invoke with adjusted flags.
+
+The pre-flight block MUST be emitted before any teammate spawn in step 5. On `--resume`, emit a pre-flight summary for the remaining plan-phases (not the originally-planned full set) so the user sees the actual upcoming work.
 
 ### 4. Resume (if --resume)
 
