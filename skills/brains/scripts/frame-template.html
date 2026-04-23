@@ -193,6 +193,64 @@
     .mock-button { background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; }
     .mock-input { background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; width: 100%; }
 
+    /* ===== ADR GATE VIEW ===== */
+    .adr-view { display: flex; flex-direction: column; gap: 2rem; }
+    .adr-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .adr-card-header {
+      background: var(--bg-tertiary);
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .adr-filename { font-size: 0.75rem; color: var(--text-secondary); font-family: monospace; }
+    .adr-status-badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .adr-status-badge.accepted { background: rgba(52,199,89,0.15); color: var(--success); }
+    .adr-status-badge.proposed { background: rgba(255,159,10,0.15); color: var(--warning); }
+    .adr-status-badge.rejected { background: rgba(255,59,48,0.15); color: var(--error); }
+    .adr-card-body { padding: 1.5rem; overflow-x: auto; }
+    .adr-card-body h1 { font-size: 1.4rem; margin-bottom: 1rem; }
+    .adr-card-body h2 { font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+    .adr-card-body h3 { font-size: 0.95rem; margin-top: 1rem; margin-bottom: 0.25rem; }
+    .adr-card-body p { margin-bottom: 0.75rem; color: var(--text-primary); }
+    .adr-card-body ul, .adr-card-body ol { margin: 0.5rem 0 0.75rem 1.5rem; }
+    .adr-card-body li { margin-bottom: 0.25rem; }
+    .adr-card-body pre { background: var(--bg-tertiary); border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; font-size: 0.85rem; }
+    .adr-card-body code { font-family: monospace; font-size: 0.9em; background: var(--bg-tertiary); padding: 0.1em 0.3em; border-radius: 3px; }
+    .adr-card-body pre code { background: none; padding: 0; }
+    .adr-card-body blockquote { border-left: 3px solid var(--accent); padding-left: 1rem; color: var(--text-secondary); margin: 0.75rem 0; }
+    .adr-card-body table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.85rem; }
+    .adr-card-body th, .adr-card-body td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+    .adr-card-body th { background: var(--bg-tertiary); }
+    .adr-card-body details { margin: 0.5rem 0; }
+    .adr-card-body summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
+    .mermaid-error {
+      border: 2px solid var(--error);
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+    }
+    .mermaid-error .error-label {
+      color: var(--error);
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    .mermaid-error pre { background: none; padding: 0; margin: 0; border: none; font-size: 0.8rem; }
+
     /* ===== BRAINS LOADER OVERLAY ===== */
     #brains-loader {
       display: flex;
@@ -329,12 +387,15 @@
       }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <script type="module">
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
     mermaid.initialize({
       startOnLoad: true,
       theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default'
     });
+    window._mermaid = mermaid;
   </script>
 </head>
 <body>
@@ -392,5 +453,93 @@
       }
     });
   </script>
+
+<script>
+  /* eslint-disable */
+  /*
+   * renderADRView(adrs) — render ADR gate view into #claude-content.
+   * adrs: Array of { filename, status, body } where body is raw Markdown.
+   * Uses marked (Markdown->HTML) + DOMPurify (sanitize) loaded from CDN.
+   * DOMPurify configured with SVG+svgFilters profiles so Mermaid SVG is
+   * not stripped by task 2.6b rendering.
+   */
+  window.renderADRView = function(adrs) {
+    var content = document.getElementById('claude-content');
+    if (!content) return;
+    var container = document.createElement('div');
+    container.className = 'adr-view';
+    adrs.forEach(function(adr) {
+      var card = document.createElement('div');
+      card.className = 'adr-card';
+      var header = document.createElement('div');
+      header.className = 'adr-card-header';
+      var fnSpan = document.createElement('span');
+      fnSpan.className = 'adr-filename';
+      fnSpan.textContent = adr.filename || '';
+      var statusStr = (adr.status || 'proposed').toLowerCase();
+      var badge = document.createElement('span');
+      badge.className = 'adr-status-badge ' + statusStr;
+      badge.textContent = adr.status || 'Proposed';
+      header.appendChild(fnSpan);
+      header.appendChild(badge);
+      var body = document.createElement('div');
+      body.className = 'adr-card-body';
+      var rawHtml = (typeof marked !== 'undefined')
+        ? marked.parse(adr.body || '')
+        : '<pre>' + (adr.body || '').replace(/</g, '&lt;') + '</pre>';
+      /* DOMPurify sanitizes all marked() output — raw HTML never touches DOM */
+      var safeHtml = (typeof DOMPurify !== 'undefined')
+        ? DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true, svg: true, svgFilters: true } })
+        : rawHtml;
+      body.innerHTML = safeHtml; /* safe: DOMPurify-sanitized above */
+      card.appendChild(header);
+      card.appendChild(body);
+      container.appendChild(card);
+    });
+    content.textContent = ''; /* clear without innerHTML */
+    content.appendChild(container);
+    if (window._renderMermaidBlocks) window._renderMermaidBlocks(content);
+  };
+</script>
+
+<script>
+  /*
+   * _renderMermaidBlocks(root) — per-block Mermaid rendering with try/catch.
+   * Called after renderADRView populates the DOM. Finds all <pre class="mermaid">
+   * elements under root and renders each independently. A parse failure on
+   * one block shows raw source + error in a red container; others continue.
+   * No global window.onerror handler — all catches are scoped per block.
+   */
+  var _mermaidBlockCounter = 0;
+  window._renderMermaidBlocks = function(root) {
+    var mermaid = window._mermaid;
+    if (!mermaid) return; /* CDN not loaded yet — startOnLoad will handle it */
+    var blocks = (root || document).querySelectorAll('pre.mermaid');
+    blocks.forEach(function(pre) {
+      var src = pre.textContent || '';
+      var id = 'mermaid-block-' + (++_mermaidBlockCounter);
+      mermaid.render(id, src).then(function(result) {
+        var wrapper = document.createElement('div');
+        wrapper.innerHTML = result.svg; /* safe: mermaid-generated SVG */
+        pre.parentNode.replaceChild(wrapper, pre);
+      }).catch(function(err) {
+        var errBox = document.createElement('div');
+        errBox.className = 'mermaid-error';
+        var label = document.createElement('div');
+        label.className = 'error-label';
+        label.textContent = 'Mermaid parse error:';
+        var errPre = document.createElement('pre');
+        errPre.textContent = (err && err.message) ? err.message : String(err);
+        var srcPre = document.createElement('pre');
+        srcPre.textContent = src;
+        errBox.appendChild(label);
+        errBox.appendChild(errPre);
+        errBox.appendChild(srcPre);
+        pre.parentNode.replaceChild(errBox, pre);
+      });
+    });
+  };
+</script>
+
 </body>
 </html>
