@@ -10,7 +10,7 @@ Check for `~/.config/brains/renderer.json`. If the file exists and contains a `k
 
 **Validate `kroki_url` before use:**
 - Scheme MUST be `http` or `https`. Reject any other scheme.
-- Host MUST be a local address: `localhost`, `127.0.0.1`, `::1`, or a `.local` domain. Reject external hostnames (this prevents SSRF — diagram source must not be sent to arbitrary hosts via this path).
+- Host MUST be a local address: `localhost`, `127.0.0.1`, `::1`, or a `.local` domain. Reject external hostnames (this prevents SSRF — diagram source must not be sent to arbitrary hosts via this path). Note: `brains:setup --with-kroki` always writes `localhost`; `.local` domains are a broader trust model for user-managed Kroki instances (e.g., a container on a local VM or NAS accessible via mDNS) and are not required for the standard setup path.
 - Strip any trailing `/` from `kroki_url` before appending `/mermaid/svg`.
 - If validation fails, fall through to the next renderer (do not abort; treat as unavailable).
 
