@@ -37,7 +37,18 @@ Use RFC 2119 MUST / MUST NOT / SHOULD / SHOULD NOT / MAY language in the Require
 - <api>: X.Y
 
 ## Diagram
-<mermaid block, if warranted: ≥3 components with ≥2 relationships, or ≥1 state machine>
+
+<!-- brains:diagram populates this section. With SVG renderer: include the image line below. Without renderer: omit the image line and replace it with the renderer-unavailable HTML comment. The <details> block is always present. See skills/diagram/references/storage-conventions.md for exact formats. -->
+
+![flowchart diagram](diagrams/<adr-filename-stem>-<type>.svg)
+
+<details><summary>Mermaid source</summary>
+
+```mermaid
+<mermaid source here>
+```
+
+</details>
 
 ## Consequences
 <What changes as a result>

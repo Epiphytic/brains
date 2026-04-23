@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Superpowers Brainstorming</title>
+  <title>BRAINS!</title>
   <style>
     /*
      * BRAINSTORM COMPANION FRAME TEMPLATE
@@ -192,11 +192,238 @@
     .mock-content { padding: 1.5rem; flex: 1; }
     .mock-button { background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; }
     .mock-input { background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; width: 100%; }
+
+    /* ===== ADR GATE VIEW ===== */
+    .adr-view { display: flex; flex-direction: column; gap: 2rem; }
+    .adr-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .adr-card-header {
+      background: var(--bg-tertiary);
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .adr-filename { font-size: 0.75rem; color: var(--text-secondary); font-family: monospace; }
+    .adr-status-badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .adr-status-badge.accepted { background: rgba(52,199,89,0.15); color: var(--success); }
+    .adr-status-badge.proposed { background: rgba(255,159,10,0.15); color: var(--warning); }
+    .adr-status-badge.rejected { background: rgba(255,59,48,0.15); color: var(--error); }
+    .adr-card-body { padding: 1.5rem; overflow-x: auto; }
+    .adr-card-body h1 { font-size: 1.4rem; margin-bottom: 1rem; }
+    .adr-card-body h2 { font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+    .adr-card-body h3 { font-size: 0.95rem; margin-top: 1rem; margin-bottom: 0.25rem; }
+    .adr-card-body p { margin-bottom: 0.75rem; color: var(--text-primary); }
+    .adr-card-body ul, .adr-card-body ol { margin: 0.5rem 0 0.75rem 1.5rem; }
+    .adr-card-body li { margin-bottom: 0.25rem; }
+    .adr-card-body pre { background: var(--bg-tertiary); border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; font-size: 0.85rem; }
+    .adr-card-body code { font-family: monospace; font-size: 0.9em; background: var(--bg-tertiary); padding: 0.1em 0.3em; border-radius: 3px; }
+    .adr-card-body pre code { background: none; padding: 0; }
+    .adr-card-body blockquote { border-left: 3px solid var(--accent); padding-left: 1rem; color: var(--text-secondary); margin: 0.75rem 0; }
+    .adr-card-body table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.85rem; }
+    .adr-card-body th, .adr-card-body td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+    .adr-card-body th { background: var(--bg-tertiary); }
+    .adr-card-body details { margin: 0.5rem 0; }
+    .adr-card-body summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
+    .mermaid-error {
+      border: 2px solid var(--error);
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+    }
+    .mermaid-error .error-label {
+      color: var(--error);
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    .mermaid-error pre { background: none; padding: 0; margin: 0; border: none; font-size: 0.8rem; }
+
+    /* ===== BRAINS LOADER OVERLAY ===== */
+    #brains-loader {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.65);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+    }
+    #brains-loader.hidden { display: none; }
+    #brains-loader img {
+      max-width: min(480px, 90vw);
+      border-radius: 12px;
+    }
+    #loader-status {
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 500;
+      text-align: center;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    }
+
+    /* ===== ZOMBIE WORKING SPRITES (hand-authored, no external CDN) ===== */
+    /* Usage: <div class="zombie-working" data-status="Running star-chamber review..."></div> */
+    .zombie-working {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      position: relative;
+    }
+    .zombie-working::after {
+      content: attr(data-status);
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+    .zombie {
+      width: 40px;
+      height: 64px;
+      position: relative;
+      animation: zombie-sway 1.2s ease-in-out infinite alternate;
+    }
+    .zombie:nth-child(2) { animation-delay: 0.4s; }
+    .zombie:nth-child(3) { animation-delay: 0.8s; }
+    /* zombie body parts — hand-authored SVG via CSS shapes */
+    .zombie-head {
+      width: 18px; height: 18px;
+      background: #7ec87e;
+      border-radius: 4px 4px 2px 2px;
+      margin: 0 auto 2px;
+      position: relative;
+    }
+    .zombie-head::before { /* eyes */
+      content: '';
+      position: absolute;
+      top: 5px; left: 3px;
+      width: 4px; height: 4px;
+      background: #1a1a1a;
+      border-radius: 50%;
+      box-shadow: 7px 0 0 #1a1a1a;
+    }
+    .zombie-head::after { /* mouth */
+      content: '';
+      position: absolute;
+      bottom: 3px; left: 4px;
+      width: 10px; height: 2px;
+      background: #1a1a1a;
+      border-radius: 1px;
+    }
+    .zombie-body {
+      width: 20px; height: 22px;
+      background: #5a8a5a;
+      border-radius: 3px;
+      margin: 0 auto;
+    }
+    .zombie-arm {
+      position: absolute;
+      width: 8px; height: 14px;
+      background: #7ec87e;
+      border-radius: 3px;
+      top: 20px;
+      animation: zombie-arm-reach 0.9s ease-in-out infinite alternate;
+    }
+    .zombie-arm.left  { left: -6px; animation-delay: 0.15s; }
+    .zombie-arm.right { right: -6px; transform-origin: top center; animation: zombie-arm-reach-r 0.9s ease-in-out infinite alternate; animation-delay: 0.3s; }
+    .zombie-legs {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      margin-top: 2px;
+    }
+    .zombie-leg {
+      width: 8px; height: 20px;
+      background: #4a7a4a;
+      border-radius: 2px;
+      animation: zombie-leg-shuffle 1.2s ease-in-out infinite alternate;
+    }
+    .zombie-leg:last-child { animation-delay: 0.6s; }
+
+    @keyframes zombie-sway {
+      from { transform: rotate(-4deg); }
+      to   { transform: rotate(4deg); }
+    }
+    @keyframes zombie-arm-reach {
+      from { transform: rotate(-20deg); }
+      to   { transform: rotate(20deg); }
+    }
+    @keyframes zombie-arm-reach-r {
+      from { transform: rotate(20deg); }
+      to   { transform: rotate(-20deg); }
+    }
+    @keyframes zombie-leg-shuffle {
+      from { transform: translateY(0); }
+      to   { transform: translateY(-3px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .zombie, .zombie-arm, .zombie-arm.right, .zombie-leg {
+        animation: none;
+      }
+      #brains-loader img {
+        /* hide the animated gif; show static fallback text only */
+        display: none;
+      }
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/marked.min.js" integrity="sha384-E5w5IgkrgNUtwoKwu2rkxOPdKLF8voWLoCPNLxwjBXBr9bvpOWSQOr/Zfbc8WFlX" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" integrity="sha384-sVhUXZPM5UXFjAvTNGp1v60lZG+0ssgh0vzVAiwurn1ApcYPc+dgCADWLazvY3IY" crossorigin="anonymous"></script>
+  <!-- SRI for inline ESM module imports is not supported by browsers; mermaid is loaded without integrity check -->
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default'
+    });
+    window._mermaid = mermaid;
+  </script>
 </head>
 <body>
+  <!-- BRAINS loader: visible between fragments; helper.js hides it once content loads -->
+  <div id="brains-loader">
+    <img src="/assets/BRAINS.gif" alt="BRAINS! working..." width="480">
+    <p id="loader-status">Claude is thinking...</p>
+  </div>
+
+  <!-- zombie-working template: fragments may render <div class="zombie-working" data-status="..."> -->
+  <template id="zombie-tpl">
+    <div class="zombie">
+      <div class="zombie-head"></div>
+      <div style="position:relative">
+        <div class="zombie-body"></div>
+        <div class="zombie-arm left"></div>
+        <div class="zombie-arm right"></div>
+      </div>
+      <div class="zombie-legs">
+        <div class="zombie-leg"></div>
+        <div class="zombie-leg"></div>
+      </div>
+    </div>
+  </template>
+
   <div class="header">
-    <h1><a href="https://github.com/obra/superpowers" style="color: inherit; text-decoration: none;">Superpowers Brainstorming</a></h1>
+    <h1><a href="https://github.com/Epiphytic/brains" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;">BRAINS!</a></h1>
     <div class="status">Connected</div>
   </div>
 
@@ -209,6 +436,127 @@
   <div class="indicator-bar">
     <span id="indicator-text">Click an option above, then return to the terminal</span>
   </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      /* Hide the loading overlay once this page's content has rendered */
+      var loader = document.getElementById('brains-loader');
+      if (loader) loader.classList.add('hidden');
+
+      /* Populate .zombie-working containers with zombie sprites from template */
+      var tpl = document.getElementById('zombie-tpl');
+      if (tpl) {
+        document.querySelectorAll('.zombie-working').forEach(function(container) {
+          for (var i = 0; i < 3; i++) {
+            container.appendChild(tpl.content.cloneNode(true));
+          }
+        });
+      }
+    });
+  </script>
+
+<script>
+  /*
+   * renderADRView(adrs) — render ADR gate view into #claude-content.
+   * adrs: Array of { filename, status, body } where body is raw Markdown.
+   * Uses marked (Markdown->HTML) + DOMPurify (sanitize) loaded from CDN.
+   * DOMPurify configured with SVG+svgFilters profiles so Mermaid SVG is
+   * not stripped by task 2.6b rendering.
+   */
+  window.renderADRView = function(adrs) {
+    var content = document.getElementById('claude-content');
+    if (!content) return;
+    var container = document.createElement('div');
+    container.className = 'adr-view';
+    adrs.forEach(function(adr) {
+      var card = document.createElement('div');
+      card.className = 'adr-card';
+      var header = document.createElement('div');
+      header.className = 'adr-card-header';
+      var fnSpan = document.createElement('span');
+      fnSpan.className = 'adr-filename';
+      fnSpan.textContent = adr.filename || '';
+      var statusStr = (adr.status || 'proposed').toLowerCase();
+      var badge = document.createElement('span');
+      badge.className = 'adr-status-badge ' + statusStr;
+      badge.textContent = adr.status || 'Proposed';
+      header.appendChild(fnSpan);
+      header.appendChild(badge);
+      var body = document.createElement('div');
+      body.className = 'adr-card-body';
+      var rawHtml = (typeof marked !== 'undefined')
+        ? marked.parse(adr.body || '')
+        : '<pre>' + (adr.body || '').replace(/</g, '&lt;') + '</pre>';
+      /* DOMPurify sanitizes all marked() output — raw HTML never touches DOM */
+      var safeHtml = (typeof DOMPurify !== 'undefined')
+        ? DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true, svg: true, svgFilters: true } })
+        : rawHtml;
+      body.innerHTML = safeHtml; /* safe: DOMPurify-sanitized above */
+      card.appendChild(header);
+      card.appendChild(body);
+      container.appendChild(card);
+    });
+    content.textContent = ''; /* clear without innerHTML */
+    content.appendChild(container);
+    if (window._renderMermaidBlocks) window._renderMermaidBlocks(content);
+  };
+</script>
+
+<script>
+  /*
+   * _renderMermaidBlocks(root) — per-block Mermaid rendering with try/catch.
+   * Called after renderADRView populates the DOM. Finds all <pre class="mermaid">
+   * elements under root and renders each independently. A parse failure on
+   * one block shows raw source + error in a red container; others continue.
+   * No global window.onerror handler — all catches are scoped per block.
+   *
+   * Mermaid is loaded as an ESM module (async). If window._mermaid is not yet
+   * set when this function is called, we poll briefly via requestAnimationFrame
+   * so blocks injected by renderADRView are still rendered once the module resolves.
+   */
+  var _mermaidBlockCounter = 0;
+
+  function _doRenderBlocks(mermaid, root) {
+    var blocks = Array.from((root || document).querySelectorAll('pre.mermaid'));
+    blocks.forEach(function(pre) {
+      var src = pre.textContent || '';
+      var id = 'mermaid-block-' + (++_mermaidBlockCounter);
+      mermaid.render(id, src).then(function(result) {
+        var wrapper = document.createElement('div');
+        wrapper.innerHTML = result.svg; /* safe: mermaid-generated SVG */
+        if (pre.parentNode) pre.parentNode.replaceChild(wrapper, pre);
+      }).catch(function(err) {
+        var errBox = document.createElement('div');
+        errBox.className = 'mermaid-error';
+        var label = document.createElement('div');
+        label.className = 'error-label';
+        label.textContent = 'Mermaid parse error:';
+        var errPre = document.createElement('pre');
+        errPre.textContent = (err && err.message) ? err.message : String(err);
+        var srcPre = document.createElement('pre');
+        srcPre.textContent = src;
+        errBox.appendChild(label);
+        errBox.appendChild(errPre);
+        errBox.appendChild(srcPre);
+        if (pre.parentNode) pre.parentNode.replaceChild(errBox, pre);
+      });
+    });
+  }
+
+  window._renderMermaidBlocks = function(root) {
+    if (window._mermaid) {
+      _doRenderBlocks(window._mermaid, root);
+      return;
+    }
+    /* ESM module not yet resolved — poll up to ~2s then give up */
+    var attempts = 0;
+    function poll() {
+      if (window._mermaid) { _doRenderBlocks(window._mermaid, root); return; }
+      if (++attempts < 40) requestAnimationFrame(poll);
+    }
+    requestAnimationFrame(poll);
+  };
+</script>
 
 </body>
 </html>

@@ -17,6 +17,16 @@ applies-under: --lean
   - loaded at step 2 (when writing the Research-Summary stash)
 - `skills/brains/references/visual-companion.md` (lazy-on-demand)
   - on-demand-trigger: user accepts the visual-companion offer at step 4
+- `skills/diagram/references/flowchart.md` (lazy-on-demand)
+  - on-demand-trigger: diagram generation (type: flowchart)
+- `skills/diagram/references/state.md` (lazy-on-demand)
+  - on-demand-trigger: diagram generation (type: state)
+- `skills/diagram/references/c4.md` (lazy-on-demand)
+  - on-demand-trigger: diagram generation (type: c4)
+- `skills/diagram/references/storage-conventions.md` (lazy-on-demand)
+  - on-demand-trigger: diagram generation
+- `skills/diagram/references/renderer-conventions.md` (lazy-on-demand)
+  - on-demand-trigger: diagram generation
 
 ## Artifacts
 - `docs/plans/YYYY-MM-DD-<slug>-research.md` (full)
