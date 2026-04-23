@@ -37,7 +37,32 @@ Use RFC 2119 MUST / MUST NOT / SHOULD / SHOULD NOT / MAY language in the Require
 - <api>: X.Y
 
 ## Diagram
-<mermaid block, if warranted: ≥3 components with ≥2 relationships, or ≥1 state machine>
+
+<!-- condition: when SVG renderer was available, use the with-SVG variant below; otherwise use source-only -->
+
+<!-- [WITH-SVG VARIANT] -->
+<!-- ![<type> diagram](diagrams/<adr-filename-stem>-<type>.svg) -->
+<!--
+<details><summary>Mermaid source</summary>
+
+```mermaid
+<mermaid source here>
+```
+
+</details>
+-->
+
+<!-- [SOURCE-ONLY VARIANT] -->
+<!-- renderer unavailable; to enable SVG rendering, run /brains:setup --with-kroki or install @mermaid-js/mermaid-cli -->
+<!--
+<details><summary>Mermaid source</summary>
+
+```mermaid
+<mermaid source here>
+```
+
+</details>
+-->
 
 ## Consequences
 <What changes as a result>
