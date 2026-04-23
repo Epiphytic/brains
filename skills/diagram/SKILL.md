@@ -1,7 +1,7 @@
 ---
 name: diagram
 description: Generate Mermaid diagrams for ADRs and architecture documentation. Stores .mmd source and .svg output side-by-side in docs/adr/diagrams/. Invokable standalone or auto-triggered from brains:brains phase-1 step 8.
-argument-hint: '"<description>" [--type <type>] [--max-diagrams N] [--no-diagram] [--diagram <type>] [--kroki-cloud]'
+argument-hint: '"<description>" [--type <type>] [--kroki-cloud]'
 allowed-tools:
   - Read
   - Write
@@ -41,13 +41,17 @@ Always load on any diagram generation: `skills/diagram/references/renderer-conve
 
 ## Flags
 
-| Flag | Behavior |
-|---|---|
-| `--type <type>` | Standalone: set diagram type, skip heuristic inference |
-| `--max-diagrams N` | Auto-trigger: allow up to N diagrams (1-5, default 1) per distinct heuristic |
-| `--no-diagram` | Auto-trigger: suppress all diagram generation |
-| `--diagram <type>` | Auto-trigger: force specific type, override `--max-diagrams` (differs from `--type`: this overrides the ADR heuristic; `--type` selects type in standalone mode) |
-| `--kroki-cloud` | Opt-in to kroki.io cloud; requires explicit interactive consent. DISALLOWED in auto-trigger mode — source-only fallback is used instead. |
+| Flag | Scope | Behavior |
+|---|---|---|
+| `--type <type>` | Standalone | Set diagram type; skips heuristic inference. This is the primary flag for standalone `/brains:diagram` calls. |
+| `--max-diagrams N` | Auto-trigger | Allow up to N diagrams (1-5, default 1) per distinct heuristic. |
+| `--no-diagram` | Auto-trigger | Suppress all diagram generation. |
+| `--diagram <type>` | Auto-trigger | Force a specific type, overriding heuristics and `--max-diagrams`. Passed by `/brains:brains` step 8; dispatched internally as `--type <type>` to this skill. NOT a user flag for standalone calls — use `--type` instead. |
+| `--kroki-cloud` | Both | Opt-in to kroki.io cloud; requires explicit interactive consent. DISALLOWED in auto-trigger mode — source-only fallback is used instead. |
+
+> **`--type` vs `--diagram` — why two flags?** These are flags in two different skills, not two versions of the same flag.
+> `--type` belongs to `brains:diagram` (this skill): it selects the type when invoking the skill directly.
+> `--diagram` belongs to `brains:brains`: it is a pipeline-level override that forces a specific type before the auto-trigger heuristic runs, then gets passed down to this skill as `--type`. A user invoking `/brains:diagram` directly should always use `--type`; `--diagram` is only relevant when invoking `/brains:brains`.
 
 `--max-diagrams` active v0.4 priority order when N > 1: `state > flowchart > C4`  
 Reserved future slots (v0.5, inactive): ER (after state), sequence (after C4)
