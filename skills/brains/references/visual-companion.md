@@ -40,6 +40,8 @@ Returns JSON with `port`, `url`, `screen_dir`, and `state_dir`. Save these value
 
 Tell the user to open the URL. Remind them to add `.superpowers/` to `.gitignore` if not already present.
 
+**Port selection.** By default a random ephemeral port (49152–65535) is used — ideal for isolated sessions. Users who want a predictable URL can either pass `--port N` (one-shot override) or create `~/.config/brains/companion.json` with `{"start_port": N}` — each subsequent server start then uses `N, N+1, N+2, …` (persisted state at `~/.local/state/brains/companion-next-port.txt`). If the chosen port is in use, the server retries up to 9 ports above it before exiting with an error.
+
 ## The Loop
 
 1. **Check server is alive** (`$STATE_DIR/server-info` exists, `server-stopped` does not). If server has shut down, restart with `start-server.sh`.

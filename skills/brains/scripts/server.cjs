@@ -73,7 +73,17 @@ function decodeFrame(buffer) {
 
 // ========== Configuration ==========
 
-const PORT = process.env.BRAINSTORM_PORT || (49152 + Math.floor(Math.random() * 16383));
+// Port selection: if BRAINSTORM_PORT is set (from --port or config-driven start_port
+// in start-server.sh), use it as the starting port and retry up to 9 ports above
+// on EADDRINUSE. Otherwise use a random ephemeral port (one-shot, no retry).
+const ENV_PORT = (() => {
+  const raw = process.env.BRAINSTORM_PORT;
+  if (!raw) return null;
+  const p = Number(raw);
+  return Number.isInteger(p) && p >= 1024 && p <= 65535 ? p : null;
+})();
+const CONFIGURED_PORT = ENV_PORT;
+const PORT = CONFIGURED_PORT !== null ? CONFIGURED_PORT : (49152 + Math.floor(Math.random() * 16383));
 const HOST = process.env.BRAINSTORM_HOST || '127.0.0.1';
 const URL_HOST = process.env.BRAINSTORM_URL_HOST || (HOST === '127.0.0.1' ? 'localhost' : HOST);
 const SESSION_DIR = process.env.BRAINSTORM_DIR || '/tmp/brainstorm';
@@ -351,15 +361,45 @@ function startServer() {
     }
   }
 
-  server.listen(PORT, HOST, () => {
+  const emitStarted = (actualPort) => {
     const info = JSON.stringify({
-      type: 'server-started', port: Number(PORT), host: HOST,
-      url_host: URL_HOST, url: 'http://' + URL_HOST + ':' + PORT,
+      type: 'server-started', port: Number(actualPort), host: HOST,
+      url_host: URL_HOST, url: 'http://' + URL_HOST + ':' + actualPort,
       screen_dir: CONTENT_DIR, state_dir: STATE_DIR
     });
     console.log(info);
     fs.writeFileSync(path.join(STATE_DIR, 'server-info'), info + '\n');
-  });
+  };
+
+  if (CONFIGURED_PORT !== null) {
+    const MAX_ATTEMPTS = 10;
+    let attempts = 0;
+    const tryListen = (port) => {
+      const onErr = (err) => {
+        // Stale 'listening' listener from this attempt must be cleared before
+        // the next attempt; otherwise a later successful bind fires all the
+        // accumulated listeners and emitStarted runs more than once.
+        server.removeListener('listening', onListening);
+        if (err.code === 'EADDRINUSE' && attempts + 1 < MAX_ATTEMPTS && port + 1 <= 65535) {
+          attempts++;
+          tryListen(port + 1);
+        } else {
+          console.error(JSON.stringify({ type: 'error', error: err.message, code: err.code, port: port }));
+          process.exit(1);
+        }
+      };
+      const onListening = () => {
+        server.removeListener('error', onErr);
+        emitStarted(port);
+      };
+      server.once('error', onErr);
+      server.once('listening', onListening);
+      server.listen(port, HOST);
+    };
+    tryListen(PORT);
+  } else {
+    server.listen(PORT, HOST, () => emitStarted(PORT));
+  }
 }
 
 if (require.main === module) {
