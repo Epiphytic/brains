@@ -19,6 +19,8 @@ BRAINS_PATH="<base directory from header>/../.."
 
 ## Scope
 
+The `--with-kroki` and `--without-kroki` flags are orthogonal to `--global`/`--local` — they may be run independently (e.g., `/brains:setup --with-kroki` without any global/local flag) or combined in one invocation (e.g., `/brains:setup --global --with-kroki`). When combined, run global/local setup first, then the Kroki step.
+
 Parse the `--global` or `--local` flag from arguments. If neither is provided, ask:
 
 > "Should this setup apply globally (all projects) or locally (this project only)?
@@ -337,7 +339,10 @@ Starts a local Kroki container. `brains:diagram` will use it as the primary rend
 
 **Runtime detection:** `command -v podman` first; if absent, `command -v docker`. If neither is found, print an error to stderr and exit non-zero. Do NOT touch `~/.config/brains/renderer.json`.
 
-**Idempotency:** Run `<runtime> ps --all` and check for a container named `brains-kroki`. If it is already running, skip to writing `renderer.json`. If it exists but is stopped, remove it (`<runtime> rm brains-kroki`), then pull and run. If absent, pull and run directly.
+**Idempotency:** Run `<runtime> ps --all` and check for a container named `brains-kroki`.
+- **Already running:** inspect its published port (`<runtime> inspect brains-kroki --format '{{(index (index .HostConfig.PortBindings "8000/tcp") 0).HostPort}}'`). If the port matches the requested `--port` (or default 8000), skip to writing `renderer.json`. If the port differs, stop and remove the container, then pull and run with the new port.
+- **Exists but stopped:** remove it (`<runtime> rm brains-kroki`), then pull and run.
+- **Absent:** pull and run directly.
 
 **Pull and run:** Parse `--port N` from arguments (default `8000`). Run:
 - `<runtime> pull yuzutech/kroki:latest`
@@ -345,17 +350,17 @@ Starts a local Kroki container. `brains:diagram` will use it as the primary rend
 
 (The `--restart=unless-stopped` flag is identical for both podman and docker.)
 
-**Write `~/.config/brains/renderer.json`** with exactly these three fields:
+**Write `~/.config/brains/renderer.json`** — replace the file entirely with exactly these three fields (no merge, no extra fields):
 
 ```json
 {
   "kroki_url": "http://localhost:<PORT>",
-  "kroki_runtime": "podman|docker",
-  "kroki_started_at": "<UTC ISO-8601>"
+  "kroki_runtime": "podman",
+  "kroki_started_at": "2026-04-23T14:30:00Z"
 }
 ```
 
-Use the Write tool. Substitute the actual PORT, RUNTIME (`podman` or `docker`), and current UTC timestamp.
+Use the Write tool. Substitute the actual PORT, RUNTIME (`podman` or `docker`), and current UTC timestamp in ISO-8601 format.
 
 **Verify:** Check `<runtime> ps --filter name=brains-kroki` shows the container running and `~/.config/brains/renderer.json` exists.
 
@@ -364,10 +369,10 @@ Use the Write tool. Substitute the actual PORT, RUNTIME (`podman` or `docker`), 
 No-op (exit 0) if `~/.config/brains/renderer.json` does not exist or contains no `kroki_*` keys.
 
 Otherwise:
-1. Read `kroki_runtime` from `renderer.json` to get the container runtime.
+1. Read `kroki_runtime` from `renderer.json`. If missing or not `podman`/`docker`, probe `podman` then `docker` for `brains-kroki` and use whichever finds it.
 2. Stop and remove the container: `<runtime> stop brains-kroki; <runtime> rm brains-kroki` (ignore errors if already gone).
-3. Remove all `kroki_*` keys (`kroki_url`, `kroki_runtime`, `kroki_started_at`) from `renderer.json`. Use the Read and Write tools — do not shell out to `jq`. If no keys remain, delete the file.
-4. Verify: `<runtime> ps --all` no longer lists `brains-kroki`; `renderer.json` contains no `kroki_url` key.
+3. Remove all `kroki_*` keys (`kroki_url`, `kroki_runtime`, `kroki_started_at`) from `renderer.json` using the Read and Write tools — do not shell out to `jq`. If no keys remain, delete the file using Bash (`rm ~/.config/brains/renderer.json`).
+4. Verify: `<runtime> ps --all` no longer lists `brains-kroki`; `renderer.json` does not exist or contains no `kroki_url` key.
 
 ## Reconfiguration
 
