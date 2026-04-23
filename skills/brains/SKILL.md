@@ -2,7 +2,7 @@
 name: brains
 description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes, and an optional --autopilot flag that auto-chains into hands-off map + implement. Chains into /brains:map at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--rounds N] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, WebFetch, WebSearch, TaskCreate, TaskUpdate
 ---
 
@@ -34,7 +34,9 @@ Do NOT chain into `/brains:map` until an ADR has been written and the user has a
 
 ### 1. Parse arguments and derive topic
 
-Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--lean`, `--rounds N`, and the topic string. If no topic is provided, ask the user.
+Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--lean`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
+
+Diagram flag rules: `--no-diagram` suppresses all auto-trigger; `--diagram <type>` forces that type and overrides `--max-diagrams` (valid types: `flowchart`, `state`, `c4`; error with list of valid types if unknown); `--max-diagrams N` must be 1–5 (error if out of range, default 1). These flags are stored and passed to step 8.
 
 `--autopilot` is an orthogonal flag that composes with any mode. When present, it does not change question-generation, synthesis, or review behavior — those still follow the selected mode. It only pre-selects **option 2** at the ADR gate (see step 9) and propagates to downstream phases.
 
@@ -68,10 +70,10 @@ After merging (parallel) or converging (debate), proceed directly to the questio
 
 ### 4. Offer visual companion (own message)
 
-If any anticipated question would be clearer with a visual (layout comparison, state-machine mockup, component diagram), offer the browser-based visual companion in its own message. See `$BRAINS_PATH/skills/brains/references/visual-companion.md` for the detailed guide. This is a per-question tool, not a mode — accept once, then decide per-question whether to use terminal or browser.
+If any anticipated question would be clearer with a visual (layout comparison, state-machine mockup, component diagram, architecture diagram), offer the browser-based visual companion in its own message. See `$BRAINS_PATH/skills/brains/references/visual-companion.md` for the detailed guide. This is a per-question tool, not a mode — accept once, then decide per-question whether to use terminal or browser.
 
 Offer prompt:
-> "Some of what we're working on might be easier to explain if I can show it to you in a web browser. I can put together mockups, diagrams, comparisons, and other visuals as we go. This feature is still new and can be token-intensive. Want to try it? (Requires opening a local URL)"
+> "Some of what we're working on might be easier to explain if I can show it to you in a web browser. I can put together mockups, architecture diagrams, comparisons, and other visuals as we go. This feature is still new and can be token-intensive. Want to try it? (Requires opening a local URL)"
 
 ### 5. Interactive questionnaire
 
@@ -97,7 +99,31 @@ The review pass sits between synthesis and ADR generation. What happens here dep
 
 Produce one or more ADRs in `docs/adr/` following the template and conventions in `$BRAINS_PATH/skills/brains/references/adr-template.md`. Filename format: `YYYY-MM-DD-NNN-<title>.md` (globally sequential NNN).
 
+**Auto-trigger diagrams** (after each ADR is written, unless `--no-diagram` was passed):
+
+Evaluate the synthesized architecture against these heuristics in priority order:
+
+1. `state` — ≥1 state machine or lifecycle with ≥2 transitions.
+2. `er` — ≥2 entities with ≥1 relationship between them.
+3. `flowchart` — ≥3 components with ≥2 relationships.
+
+Priority: `state > ER > flowchart`. When `--max-diagrams 1` (default), dispatch only the highest-priority match. When `--max-diagrams N > 1`, dispatch one diagram per firing heuristic in priority order `state > ER > flowchart > C4 > sequence`, up to N. Note: ER and sequence are v0.5-only types — their heuristics evaluate but no diagram is dispatched until those reference files ship; C4 is v0.4-active. When `--diagram <type>` was passed, force exactly that type regardless of heuristics.
+
+Each dispatched diagram: invoke `/brains:diagram` as a sub-skill with `--type <type>` and the ADR filename stem as context. At most one diagram per type per ADR.
+
 ### 9. User gate
+
+**Visual companion push (before terminal prompt):** If the companion is active, write the ADR gate view to a new file in `screen_dir` NOW — before presenting the terminal gate prompt. Use `renderADRView()` as documented in `$BRAINS_PATH/skills/brains/references/visual-companion.md`:
+
+```html
+<script>
+  window.renderADRView([
+    { filename: '<adr-filename>', status: '<status>', body: '<full ADR body>' }
+  ]);
+</script>
+```
+
+The companion view MUST remain visible while the user evaluates options. Do NOT push a waiting screen until AFTER the user responds to the gate.
 
 Present the ADR(s) to the user. If `--autopilot` was passed at skill launch, do NOT prompt — auto-select option 2 and proceed. Otherwise prompt the user to choose exactly one of:
 
@@ -135,6 +161,8 @@ Write the rejection reason to `docs/plans/YYYY-MM-DD-<slug>-rejected.md` (single
 #### Handling option 5: user-provided fixes
 
 Capture the user's text verbatim. Append to context as `User-provided fixes:\n<text>` and re-run step 6 (synthesis) then step 7 (review), producing a revised ADR. Re-present the revised ADR at this gate.
+
+**Diagram regeneration after option 5:** After the revised ADR is produced, enumerate `docs/adr/diagrams/` for files matching `<adr-stem>-{state,flowchart,c4}.mmd` (v0.4 active types) — check each type explicitly (not a wildcard glob), anchored to the current ADR's filename stem. For each `.mmd` found: read the first line. If it exactly matches `%% auto-generated by brains:diagram — remove this line to protect manual edits`, re-invoke `/brains:diagram` to regenerate from the updated architecture (ordered overwrite: write `.mmd` first, then `.svg`; on `.svg` write failure due to parse/generation error, unlink the stale `.svg`). If the first line does not match, skip and log one line: `skipping user-authored diagram: <filename>`.
 
 #### Handling option 6: skip to inline implementation
 

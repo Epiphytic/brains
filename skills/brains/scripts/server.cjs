@@ -142,6 +142,21 @@ function handleRequest(req, res) {
 
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
+  } else if (req.method === 'GET' && req.url.startsWith('/assets/')) {
+    const assetName = path.basename(req.url.slice(8));
+    const assetPath = path.join(__dirname, 'assets', assetName);
+    if (!fs.existsSync(assetPath)) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+    const ext = path.extname(assetPath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=31536000, immutable'
+    });
+    res.end(fs.readFileSync(assetPath));
   } else if (req.method === 'GET' && req.url.startsWith('/files/')) {
     const fileName = req.url.slice(7);
     const filePath = path.join(CONTENT_DIR, path.basename(fileName));
