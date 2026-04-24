@@ -1,30 +1,44 @@
 # Renderer Conventions
 
+## POST Path per Source Language
+
+The POST path on the Kroki gateway depends on the source language:
+
+| `--type` | Source language | POST path |
+|---|---|---|
+| `flowchart` | Mermaid | `/mermaid/svg` |
+| `state` | Mermaid | `/mermaid/svg` |
+| `c4` | Structurizr DSL | `/structurizr/svg` |
+
 ## Detection Sequence
 
-Check renderers in this exact priority order. Stop at the first that succeeds.
+Check renderers in this exact priority order. Stop at the first that succeeds. The `mmdc` fallback applies to Mermaid types only; it does not render Structurizr DSL, so `c4` falls straight from Kroki to source-only.
 
-### 1. Local Kroki container (preferred)
+### 1. Local Kroki container (preferred — all types)
 
 Check for `~/.config/brains/renderer.json`. If the file exists and contains a `kroki_url` field:
 
 **Validate `kroki_url` before use:**
 - Scheme MUST be `http` or `https`. Reject any other scheme.
 - Host MUST be a local address: `localhost`, `127.0.0.1`, `::1`, or a `.local` domain. Reject external hostnames (this prevents SSRF — diagram source must not be sent to arbitrary hosts via this path). Note: `brains:setup --with-kroki` always writes `localhost`; `.local` domains are a broader trust model for user-managed Kroki instances (e.g., a container on a local VM or NAS accessible via mDNS) and are not required for the standard setup path.
-- Strip any trailing `/` from `kroki_url` before appending `/mermaid/svg`.
+- Strip any trailing `/` from `kroki_url` before appending the POST path from the table above.
 - If validation fails, fall through to the next renderer (do not abort; treat as unavailable).
 
 ```
-POST ${kroki_url}/mermaid/svg
+POST ${kroki_url}${path}
 Content-Type: text/plain
-Body: <mermaid source>
+Body: <source>
 ```
 
 A 200 response with SVG content means the renderer is available. Use this renderer.
 
 If the file is absent, `kroki_url` is missing, fails validation, or the POST fails (connection refused, non-200): fall through to the next renderer.
 
-### 2. mmdc via npx (secondary)
+> **Why Kroki is required for `c4`.** Structurizr DSL is rendered by Kroki via its bundled PlantUML/Structurizr backend. The `mmdc` fallback only understands Mermaid, so it cannot render Structurizr source. When Kroki is unavailable, `c4` skips step 2 and goes directly to the source-only fallback (step 3).
+
+### 2. mmdc via npx (secondary — Mermaid types only)
+
+Applies only when `--type` is `flowchart` or `state`. For `c4`, skip this step.
 
 Attempt:
 
@@ -38,10 +52,10 @@ If npx is not installed, the package download fails, or mmdc exits non-zero: fal
 
 ### 3. Source-only fallback
 
-No SVG is produced. Write the `.mmd` file only. Emit the HTML comment hint in the ADR `## Diagram` section:
+No SVG is produced. Write the source file (`.mmd` for Mermaid, `.dsl` for Structurizr) only. Emit the HTML comment hint in the ADR `## Diagram` section:
 
 ```html
-<!-- renderer unavailable; to enable SVG rendering, run /brains:setup --with-kroki or install @mermaid-js/mermaid-cli -->
+<!-- renderer unavailable; to enable SVG rendering, run /brains:setup --with-kroki (required for c4) or install @mermaid-js/mermaid-cli (Mermaid types only) -->
 ```
 
 ## NO-CLOUD DEFAULT
