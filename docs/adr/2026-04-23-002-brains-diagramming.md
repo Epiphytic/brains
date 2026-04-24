@@ -158,7 +158,11 @@ BRAINS ships a single new skill — `brains:diagram` — with per-type guidance 
 
 ## Diagram
 
-<!-- renderer unavailable at ADR authoring; to enable SVG rendering, run /brains:setup --with-kroki or install @mermaid-js/mermaid-cli -->
+Regenerated in v0.4.4 using the current `brains:diagram` pipeline against a local Kroki gateway + `kroki-mermaid` companion pair. Flowchart remains Mermaid (v0.4.4 generalized `.mmd`/`.dsl` per type); the C4 context view was added as Structurizr DSL rendered via Kroki's bundled PlantUML/Structurizr backend.
+
+### Pipeline overview (flowchart)
+
+![flowchart diagram](diagrams/2026-04-23-002-brains-diagramming-flowchart.svg)
 
 <details><summary>Mermaid source</summary>
 
@@ -173,18 +177,19 @@ flowchart TB
         R{"route by type"}
         RF["flowchart.md (lazy)"]
         RS["state.md (lazy)"]
+        RZ["structurizr.md (lazy)"]
         RV["validator + retry"]
     end
 
     subgraph Renderer["Renderer pipeline"]
         DET{"detect"}
-        K["Local Kroki container"]
-        M["mmdc via npx"]
+        K["Local Kroki gateway<br/>+ kroki-mermaid companion"]
+        M["mmdc via npx (Mermaid only)"]
         F["source-only fallback"]
     end
 
     subgraph Out["docs/adr/diagrams/"]
-        MMD[".mmd source (canonical)"]
+        SRC["source (.mmd | .dsl, canonical)"]
         SVG[".svg rendered"]
         ADR["ADR ## Diagram with inline details"]
     end
@@ -194,7 +199,7 @@ flowchart TB
     end
 
     subgraph Setup["/brains:setup --with-kroki"]
-        POD["podman or docker run yuzutech/kroki"]
+        POD["podman or docker: kroki + kroki-mermaid"]
         CFG["~/.config/brains/renderer.json"]
     end
 
@@ -202,19 +207,81 @@ flowchart TB
     S8 -->|auto-trigger one diagram| R
     R --> RF
     R --> RS
+    R --> RZ
     RF --> RV
     RS --> RV
+    RZ --> RV
     RV --> DET
     DET -->|kroki_url set| K --> SVG
-    DET -->|node ok| M --> SVG
-    DET -->|none| F
-    RV --> MMD
-    MMD --> ADR
+    DET -->|node ok, Mermaid only| M --> SVG
+    DET -->|none, or c4 with no Kroki| F
+    RV --> SRC
+    SRC --> ADR
     SVG --> ADR
     F --> ADR
     POD --> CFG
     CFG -.read by.-> DET
-    FT -.POST non-Mermaid.-> K
+    FT -.live Mermaid blocks.-> K
+```
+
+</details>
+
+### System context (C4)
+
+![C4 context diagram](diagrams/2026-04-23-002-brains-diagramming-c4.svg)
+
+<details><summary>Structurizr DSL source</summary>
+
+```dsl
+workspace "brains:diagram" "System context for the brains:diagram skill and its renderer pipeline" {
+
+  model {
+    dev = person "Developer" "Runs /brains:brains or /brains:diagram"
+
+    brains = softwareSystem "BRAINS Plugin" "Three-phase multi-LLM development workflow" {
+      brainsSkill = container "/brains:brains" "Phase 1 — questionnaire, synthesis, ADR"
+      diagramSkill = container "/brains:diagram" "Generates Mermaid (.mmd) or Structurizr (.dsl) source and renders .svg"
+      setupSkill = container "/brains:setup" "Installs deps; runs and tears down the Kroki pair"
+      companion = container "BRAINS! Companion" "Local SSE server with live Mermaid rendering"
+    }
+
+    krokiPair = softwareSystem "Local Kroki pair" "yuzutech/kroki gateway + yuzutech/kroki-mermaid companion, on brains-kroki-net" "External"
+    mmdc = softwareSystem "mmdc via npx" "Mermaid CLI fallback renderer" "External"
+    diagramsDir = softwareSystem "docs/adr/diagrams/" "Canonical source (.mmd, .dsl) + rendered .svg per ADR" "External"
+    adrDir = softwareSystem "docs/adr/" "ADRs with ## Diagram section referencing the SVG" "External"
+    rendererJson = softwareSystem "~/.config/brains/renderer.json" "kroki_url + runtime + companion metadata" "External"
+
+    dev -> brainsSkill "Invokes phase 1" "/brains:brains"
+    dev -> diagramSkill "Standalone diagram generation" "/brains:diagram"
+    dev -> setupSkill "Enable or disable Kroki" "--with-kroki / --without-kroki"
+    dev -> companion "Views mockups, ADRs, diagrams" "http://127.0.0.1:<port>"
+
+    brainsSkill -> diagramSkill "Auto-trigger at ADR write (step 8)" "skill dispatch"
+    brainsSkill -> adrDir "Writes ADR with ## Diagram section" "Write tool"
+
+    diagramSkill -> rendererJson "Reads kroki_url for renderer detection" "file read"
+    diagramSkill -> krokiPair "POST /mermaid/svg or /structurizr/svg" "HTTP (localhost only)"
+    diagramSkill -> mmdc "Fallback for Mermaid types only" "npx subprocess"
+    diagramSkill -> diagramsDir "Writes source first, then SVG" "Write tool"
+
+    setupSkill -> krokiPair "Runs gateway + mermaid companion on brains-kroki-net" "podman / docker"
+    setupSkill -> rendererJson "Atomic write or cleanup" "file write"
+
+    companion -> krokiPair "Live Mermaid block rendering in fragments" "HTTP"
+
+    adrDir -> diagramsDir "References SVG via relative path" "![](diagrams/...svg)"
+  }
+
+  views {
+    systemContext brains "SystemContext" { include *; autoLayout lr }
+    container brains "Containers" { include *; autoLayout lr }
+    styles {
+      element "External" { background #999999; color #ffffff }
+      element "Person" { shape person }
+    }
+    theme default
+  }
+}
 ```
 
 </details>
