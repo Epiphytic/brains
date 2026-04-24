@@ -335,46 +335,59 @@ echo "=== Done ==="
 
 ### `--with-kroki [--port N]`
 
-Starts a local Kroki container. `brains:diagram` will use it as the primary renderer; `mmdc` remains the fallback. No diagram source is sent to external services.
+Starts two local containers that work together: the Kroki gateway (`yuzutech/kroki`) and the Mermaid companion (`yuzutech/kroki-mermaid`). `brains:diagram` uses this pair as the primary renderer for all types — Mermaid (`flowchart`, `state`) is rendered by the companion; Structurizr DSL (`c4`) is rendered by PlantUML/Structurizr code bundled inside the gateway itself, so no separate Structurizr companion is required. `mmdc` remains a secondary fallback for Mermaid types only. No diagram source is sent to external services.
 
 **Runtime detection:** `command -v podman` first; if absent, `command -v docker`. If neither is found, print an error to stderr and exit non-zero. Do NOT touch `~/.config/brains/renderer.json`.
 
-**Idempotency:** Run `<runtime> ps --all` and check for a container named `brains-kroki`.
-- **Already running:** inspect its effective published port using `.NetworkSettings.Ports["8000/tcp"][0].HostPort` (more reliable across rootless modes than `.HostConfig.PortBindings`). If inspect returns empty, treat the port as unknown and recreate. If the port matches the requested `--port` (or default 8000), skip to writing `renderer.json`. If the port differs, stop and remove the container, then pull and run with the new port.
-- **Exists but stopped:** remove it (`<runtime> rm brains-kroki`), then pull and run.
-- **Absent:** pull and run directly.
+**Network:** Both containers must share a user-defined network so the gateway can reach the companion by name. Create `brains-kroki-net` (idempotent — `<runtime> network create brains-kroki-net 2>/dev/null || true`).
 
-**Pull and run:** Parse `--port N` from arguments (default `8000`). **Validate PORT before use:** it must be a positive integer in the range 1–65535 (digits only, no shell metacharacters). If invalid, print an error and exit non-zero without touching the container or `renderer.json`. Run:
+**Idempotency:** Run `<runtime> ps --all` and check for two container names: `brains-kroki` (gateway) and `brains-kroki-mermaid` (companion). Treat them as a pair — if either is missing/stopped or the gateway's published port doesn't match the requested `--port`, stop/remove both and recreate the pair. Inspect the gateway port via `.NetworkSettings.Ports["8000/tcp"][0].HostPort` (more reliable across rootless modes than `.HostConfig.PortBindings`); if inspect returns empty, treat the port as unknown and recreate.
+
+**Pull and run:** Parse `--port N` from arguments (default `8000`). **Validate PORT before use:** it must be a positive integer in the range 1–65535 (digits only, no shell metacharacters). If invalid, print an error and exit non-zero without touching containers or `renderer.json`.
+
+Pull both images:
 - `<runtime> pull yuzutech/kroki:latest`
-- `<runtime> run -d --name brains-kroki -p 127.0.0.1:<PORT>:8000 --restart=unless-stopped yuzutech/kroki:latest`
+- `<runtime> pull yuzutech/kroki-mermaid:latest`
 
-Bind to `127.0.0.1` explicitly so Kroki is only reachable on the local loopback interface, not exposed to the network.
+Run the companion first (the gateway depends on it at resolve time):
+- `<runtime> run -d --name brains-kroki-mermaid --network brains-kroki-net --restart=unless-stopped yuzutech/kroki-mermaid:latest`
 
-(The `--restart=unless-stopped` flag is identical for both podman and docker.)
+Run the gateway, bound only to the loopback interface, and point it at the companion by name:
+- `<runtime> run -d --name brains-kroki --network brains-kroki-net -e KROKI_MERMAID_HOST=brains-kroki-mermaid -p 127.0.0.1:<PORT>:8000 --restart=unless-stopped yuzutech/kroki:latest`
 
-**Write `~/.config/brains/renderer.json` atomically** — replace the file entirely with exactly these three fields (no merge, no extra fields). Use Bash to write atomically: write to `~/.config/brains/renderer.json.tmp` first, then rename it into place with `mv ~/.config/brains/renderer.json.tmp ~/.config/brains/renderer.json`. Ensure `~/.config/brains/` exists first (`mkdir -p ~/.config/brains`).
+Bind to `127.0.0.1` explicitly so Kroki is only reachable on the local loopback interface, not exposed to the network. The companion is reachable only through the internal `brains-kroki-net` network and is never published to the host. `--restart=unless-stopped` is identical for both podman and docker.
+
+**Write `~/.config/brains/renderer.json` atomically** — replace the file entirely with exactly these fields (no merge, no extra fields). Use Bash to write atomically: write to `~/.config/brains/renderer.json.tmp` first, then rename it into place with `mv ~/.config/brains/renderer.json.tmp ~/.config/brains/renderer.json`. Ensure `~/.config/brains/` exists first (`mkdir -p ~/.config/brains`).
 
 ```json
 {
   "kroki_url": "http://localhost:<PORT>",
   "kroki_runtime": "podman",
-  "kroki_started_at": "2026-04-23T14:30:00Z"
+  "kroki_started_at": "2026-04-23T14:30:00Z",
+  "kroki_network": "brains-kroki-net",
+  "kroki_companion": "brains-kroki-mermaid"
 }
 ```
 
-Substitute the actual PORT, RUNTIME (`podman` or `docker`), and current UTC timestamp in ISO-8601 format.
+Substitute the actual PORT, RUNTIME (`podman` or `docker`), and current UTC timestamp in ISO-8601 format. The `kroki_network` and `kroki_companion` fields let `--without-kroki` clean up deterministically.
 
-**Verify:** Check `<runtime> ps --filter name=brains-kroki` shows the container running and `~/.config/brains/renderer.json` exists.
+**Verify:**
+- `<runtime> ps --filter name=brains-kroki` shows both `brains-kroki` and `brains-kroki-mermaid` running.
+- `~/.config/brains/renderer.json` exists.
+- Smoke-test both source languages:
+  - `printf 'flowchart TD\nA-->B' | curl -sf -X POST -H 'Content-Type: text/plain' --data-binary @- http://localhost:<PORT>/mermaid/svg | head -c 5` prints `<svg` or `<?xml` / `<?pla`.
+  - `printf 'workspace { model { s = softwareSystem "x" } views { systemContext s { include *; autoLayout } theme default } }' | curl -sf -X POST -H 'Content-Type: text/plain' --data-binary @- http://localhost:<PORT>/structurizr/svg | head -c 5` likewise.
 
 ### `--without-kroki`
 
 No-op (exit 0) if `~/.config/brains/renderer.json` does not exist or contains no `kroki_*` keys.
 
 Otherwise:
-1. Read `kroki_runtime` from `renderer.json`. If missing or not `podman`/`docker`, probe both `podman` and `docker` for `brains-kroki`. If found in both runtimes, clean up both (stop and remove in each). If found in neither, skip the container step and proceed to clean up `renderer.json`.
-2. Stop and remove the container(s): `<runtime> stop brains-kroki; <runtime> rm brains-kroki` (ignore errors if already gone).
-3. Remove all `kroki_*` keys (`kroki_url`, `kroki_runtime`, `kroki_started_at`) from `renderer.json` using the Read and Write tools — do not shell out to `jq`. If no keys remain, delete the file using Bash (`rm -f ~/.config/brains/renderer.json`).
-4. Verify: neither `podman` nor `docker` lists `brains-kroki`; `renderer.json` does not exist or contains no `kroki_url` key.
+1. Read `kroki_runtime` from `renderer.json`. If missing or not `podman`/`docker`, probe both `podman` and `docker` for `brains-kroki` and `brains-kroki-mermaid`. If found in either runtime, clean up in that runtime.
+2. Stop and remove both containers in order (ignore errors if already gone): `<runtime> stop brains-kroki brains-kroki-mermaid; <runtime> rm brains-kroki brains-kroki-mermaid`.
+3. Remove the user-defined network (ignore errors): `<runtime> network rm brains-kroki-net`.
+4. Remove all `kroki_*` keys (`kroki_url`, `kroki_runtime`, `kroki_started_at`, `kroki_network`, `kroki_companion`) from `renderer.json` using the Read and Write tools — do not shell out to `jq`. If no keys remain, delete the file using Bash (`rm -f ~/.config/brains/renderer.json`).
+5. Verify: neither `podman` nor `docker` lists `brains-kroki` or `brains-kroki-mermaid`; `renderer.json` does not exist or contains no `kroki_url` key.
 
 ## Reconfiguration
 

@@ -38,8 +38,8 @@ See [docs/diagrams.md](docs/diagrams.md) for rendered examples of the three diag
 - [beads](https://github.com/gastownhall/beads) — authoritative task tracker. Falls back to `TaskCreate` / `TaskUpdate` (tmux mode) or agent-teams' built-in task list (agent-teams mode) with degraded functionality.
 
 **Optional:**
-- [Node.js](https://nodejs.org/) ≥ 18.19 — powers the BRAINS! visual companion server (phase 1) and the `mmdc` fallback renderer for `brains:diagram`.
-- [podman](https://podman.io/) or [Docker](https://www.docker.com/) — required for `/brains:setup --with-kroki`, which runs a local `yuzutech/kroki` container as the preferred diagram renderer. Without a local Kroki container, `brains:diagram` falls back to `mmdc`, and then to source-only.
+- [Node.js](https://nodejs.org/) ≥ 18.19 — powers the BRAINS! visual companion server (phase 1) and the `mmdc` fallback renderer for `brains:diagram` (Mermaid types only).
+- [podman](https://podman.io/) or [Docker](https://www.docker.com/) — required for `/brains:setup --with-kroki`, which runs a local `yuzutech/kroki` gateway paired with the `yuzutech/kroki-mermaid` companion on a user-defined network. This is the preferred diagram renderer and the *only* path that supports `--type c4` (Structurizr DSL); for Mermaid types, `brains:diagram` falls back to `mmdc` and then to source-only.
 
 ## Installation
 
@@ -141,14 +141,16 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 
 ## Diagramming (v0.4+)
 
-`brains:diagram` generates Mermaid diagrams from a natural-language description and stores source + rendered SVG side-by-side under `docs/adr/diagrams/`. The `.mmd` is canonical; the `.svg` is a derived artifact that can be regenerated any time from the source.
+`brains:diagram` generates architecture diagrams from a natural-language description and stores the source + rendered SVG side-by-side under `docs/adr/diagrams/`. The source file is canonical; the `.svg` is a derived artifact that can be regenerated any time from the source.
 
-| `--type` | Use for | Reserved for v0.5 |
-|---|---|---|
-| `flowchart` | Processes, control flow, pipelines | |
-| `state` | Lifecycles, state machines, transitions | |
-| `c4` | System context and container views | |
-| — | — | `sequence`, `er` |
+| `--type` | Source language | Extension | Use for | Reserved for v0.5 |
+|---|---|---|---|---|
+| `flowchart` | Mermaid | `.mmd` | Processes, control flow, pipelines | |
+| `state` | Mermaid | `.mmd` | Lifecycles, state machines, transitions | |
+| `c4` | Structurizr DSL | `.dsl` | System context and container views | |
+| — | — | — | — | `sequence`, `er` |
+
+> **Two source languages, one skill.** Mermaid and Structurizr DSL are both rendered by the same local Kroki gateway — Mermaid via the `yuzutech/kroki-mermaid` companion container, Structurizr via the PlantUML/Structurizr engine bundled into the gateway image. The Structurizr switch for `--type c4` (v0.4.4) replaces Mermaid's experimental `C4Context` renderer, whose SVGs lacked fixed `height` attributes and rendered as broken images in GitHub.
 
 **How it's invoked:**
 
@@ -157,9 +159,9 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 
 **Rendering priority** (first that answers wins — see [`skills/diagram/references/renderer-conventions.md`](skills/diagram/references/renderer-conventions.md) for the full contract):
 
-1. **Local Kroki** — `~/.config/brains/renderer.json` with a `kroki_url` pointing at `localhost`, `127.0.0.1`, `::1`, or a `.local` domain. Enabled by `/brains:setup --with-kroki`. URL scheme is validated (http/https only) and non-local hosts are rejected (SSRF prevention — diagram source is never sent to arbitrary hosts on this path).
-2. **`mmdc` via `npx`** — `npx -p @mermaid-js/mermaid-cli mmdc`. Requires Node.js ≥ 18.19. First run may download packages.
-3. **Source-only** — write `.mmd`, skip `.svg`, leave an HTML hint in the ADR explaining how to enable rendering.
+1. **Local Kroki** — `~/.config/brains/renderer.json` with a `kroki_url` pointing at `localhost`, `127.0.0.1`, `::1`, or a `.local` domain. Enabled by `/brains:setup --with-kroki`. URL scheme is validated (http/https only) and non-local hosts are rejected (SSRF prevention — diagram source is never sent to arbitrary hosts on this path). The POST path depends on type: `/mermaid/svg` for `flowchart`/`state`, `/structurizr/svg` for `c4`.
+2. **`mmdc` via `npx`** *(Mermaid types only)* — `npx -p @mermaid-js/mermaid-cli mmdc`. Requires Node.js ≥ 18.19. First run may download packages. Not applicable to `c4` — `mmdc` doesn't understand Structurizr DSL, so `c4` skips this step and goes straight to source-only if Kroki is unavailable.
+3. **Source-only** — write source file (`.mmd` or `.dsl`), skip `.svg`, leave an HTML hint in the ADR explaining how to enable rendering.
 
 The public `https://kroki.io` cloud service is **never** used as an automatic fallback. `--kroki-cloud` opts into it for a single standalone invocation only, with an interactive consent prompt; it is disallowed in auto-trigger mode.
 
@@ -170,10 +172,12 @@ docs/adr/
 ├── 2026-04-23-002-brains-diagramming.md
 └── diagrams/
     ├── 2026-04-23-002-brains-diagramming-flowchart.mmd
-    └── 2026-04-23-002-brains-diagramming-flowchart.svg
+    ├── 2026-04-23-002-brains-diagramming-flowchart.svg
+    ├── 2026-04-23-002-brains-diagramming-c4.dsl
+    └── 2026-04-23-002-brains-diagramming-c4.svg
 ```
 
-ADRs embed the rendered image and include the Mermaid source in a `<details>` block, so the ADR stays readable in environments that don't render images.
+ADRs embed the rendered image and include the source in a `<details>` block, so the ADR stays readable in environments that don't render images.
 
 See [**docs/diagrams.md**](docs/diagrams.md) for full rendered examples of all three types.
 
