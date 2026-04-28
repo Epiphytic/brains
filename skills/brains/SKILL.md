@@ -2,7 +2,7 @@
 name: brains
 description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes, and an optional --autopilot flag that auto-chains into hands-off map + implement. Chains into /brains:map at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--grill] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, WebFetch, WebSearch, TaskCreate, TaskUpdate
 ---
 
@@ -34,13 +34,15 @@ Do NOT chain into `/brains:map` until an ADR has been written and the user has a
 
 ### 1. Parse arguments and derive topic
 
-Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--lean`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
+Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--lean`, `--grill`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
 
 Diagram flag rules: `--no-diagram` suppresses all auto-trigger; `--diagram <type>` forces that type and overrides `--max-diagrams` (valid types: `flowchart`, `state`, `c4`, `er`, `sequence`; error with list of valid types if unknown); `--max-diagrams N` must be 1–5 (error if out of range, default 1). These flags are stored and passed to step 8.
 
 `--autopilot` is an orthogonal flag that composes with any mode. When present, it does not change question-generation, synthesis, or review behavior — those still follow the selected mode. It only pre-selects **option 2** at the ADR gate (see step 9) and propagates to downstream phases.
 
 `--lean` is an orthogonal flag that composes with any mode and with `--autopilot`. When present, activate the token-efficiency path (see `$BRAINS_PATH/manifests/phase-1-brains.md` for the role manifest): use the compact multi-llm-protocol excerpt inline rather than reading the full reference; append a `Research-Summary` block to the plan header at step 2; otherwise behave identically. Default off (byte-identical to prior behavior). `--lean` propagates to downstream phases.
+
+`--grill` is a **strategy modifier** — orthogonal to `--single`, `--parallel`, `--debate`, `--lean`, and `--autopilot`. All combinations are valid. When present, it lifts the 2–4 question cap and applies the relentless-interview questionnaire policy defined in `$BRAINS_PATH/skills/brains/references/grill-protocol.md`. `--grill` applies to phase-1 steps 3 and 5 only; it does NOT propagate to `/brains:map` or `/brains:implement`, and it MUST NOT be forwarded to any chained skill.
 
 ### 2. Initial research (subagent)
 
