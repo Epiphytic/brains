@@ -70,6 +70,8 @@ Mode-specific procedure:
 
 After merging (parallel) or converging (debate), proceed directly to the questionnaire in step 5 — do NOT present the question set for pre-approval. The per-question adaptive flow in step 5 provides course-correction; a separate approval gate is redundant by construction.
 
+**Under `--grill`:** generate the seed set identically to non-grill mode (2–4 questions with pros and cons). Additionally, EVERY seed question MUST include a **recommended answer** with a one-sentence rationale. The seed set is the **first round** of grilling, not the full questionnaire — the 2–4 cap applies only to the seed; the questionnaire in step 5 may extend beyond it. Under `--grill --parallel` or `--grill --debate`, star-chamber consultation applies to the seed only; follow-up questions MUST be generated locally.
+
 ### 4. Offer visual companion (own message)
 
 If any anticipated question would be clearer with a visual (layout comparison, state-machine mockup, component diagram, architecture diagram), offer the browser-based visual companion in its own message. See `$BRAINS_PATH/skills/brains/references/visual-companion.md` for the detailed guide. This is a per-question tool, not a mode — accept once, then decide per-question whether to use terminal or browser.
