@@ -150,6 +150,8 @@ The companion view MUST remain visible while the user evaluates options. Do NOT 
 
 Present the ADR(s) to the user. If `--autopilot` was passed at skill launch, do NOT prompt — auto-select option 2 and proceed. Otherwise prompt the user to choose exactly one of:
 
+> **`--grill --autopilot` handoff:** when both flags are present, the grill questionnaire (steps 3–5) runs to full convergence in phase 1 — interactive questioning is not skipped. After the phase-1 gate, autopilot semantics take over: option 2 is auto-selected and the skill chains into `/brains:map --autopilot`. The intent is "interview me thoroughly, then go hands-off." To opt out of the downstream autopilot while keeping grilling, use `--grill` without `--autopilot`.
+
 1. **Accept ADR(s), push to origin, and chain into `/brains:map`** (planning mode) with the inherited mode flag.
 2. **Accept ADR(s), push to origin, and chain into `/brains:map --autopilot`** (hands-off planning + implementation) with the inherited mode flag.
 3. **Accept ADR(s), push to origin, and stop.** No further phases run.
