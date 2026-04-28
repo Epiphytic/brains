@@ -1,6 +1,6 @@
 # Example Diagrams
 
-This page showcases the three diagram types `brains:diagram` can generate today (as of v0.4). Each example shows the **source** and the **rendered SVG** side-by-side — mirroring the on-disk layout the skill produces under `docs/adr/diagrams/`.
+This page showcases the five diagram types `brains:diagram` can generate (as of v0.5). Each example shows the **source** and the **rendered SVG** side-by-side — mirroring the on-disk layout the skill produces under `docs/adr/diagrams/`.
 
 Two source languages are used: **Mermaid** (`.mmd`) for `flowchart` and `state`, and **Structurizr DSL** (`.dsl`) for `c4`. Structurizr is the canonical C4 modelling language; Kroki renders it via a bundled PlantUML backend that produces cleaner SVGs with explicit pixel dimensions than Mermaid's experimental C4 keyword.
 
@@ -199,9 +199,60 @@ The `/brains:setup --with-kroki` wizard automates the same two-container setup u
 
 ---
 
-## Reserved for v0.5
+## ER diagram (`--type er`)
 
-- `--type er` — entity-relationship diagrams (auto-trigger heuristic: schema / table / relationship vocabulary)
-- `--type sequence` — sequence diagrams (auto-trigger heuristic: request / call / message vocabulary)
+Entity-relationship diagrams for architectures with ≥2 entities and ≥1 relationship. Auto-trigger priority: 2nd (after `state`, before `flowchart`). Soft cap: ≤10 entities — exceeded diagrams emit a `%% NOTE: exceeds SHOULD cap` warning on line 2.
 
-Both types are documented in [ADR-002](adr/2026-04-23-002-brains-diagramming.md) and reserved in the priority ordering, but the reference pages and dispatcher wiring land in v0.5.
+**Example source:**
+
+```mermaid
+erDiagram
+    USER {
+        int id PK
+        string username UK
+        string email UK
+    }
+    SESSION {
+        int id PK
+        int user_id FK
+        string token UK
+        string status
+    }
+    USER ||--o{ SESSION : "has"
+```
+
+**Reproduce:**
+
+```bash
+/brains:diagram "users with sessions" --type er
+```
+
+See [`skills/diagram/references/er.md`](../skills/diagram/references/er.md) for syntax reference and pitfalls.
+
+---
+
+## Sequence diagram (`--type sequence`)
+
+Sequence diagrams for architectures with ≥2 named participants and ≥3 ordered message exchanges. Auto-trigger priority: lowest (after `c4`). Linear event narratives without named senders/receivers fall through to `flowchart`. Soft cap: ≤6 participants — exceeded diagrams emit a `%% NOTE: exceeds SHOULD cap` warning on line 2.
+
+**Example source:**
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    participant DB as Database
+
+    C->>+S: POST /login
+    S->>DB: SELECT user WHERE email = ?
+    DB-->>S: row
+    S-->>-C: 200 OK { token }
+```
+
+**Reproduce:**
+
+```bash
+/brains:diagram "login flow: client posts credentials, server queries DB, returns token" --type sequence
+```
+
+See [`skills/diagram/references/sequence.md`](../skills/diagram/references/sequence.md) for syntax reference and pitfalls.

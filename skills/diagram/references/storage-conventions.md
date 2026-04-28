@@ -7,6 +7,8 @@
 | `flowchart` | Mermaid | `.mmd` | `mermaid` |
 | `state` | Mermaid | `.mmd` | `mermaid` |
 | `c4` | Structurizr DSL | `.dsl` | `dsl` |
+| `er` | Mermaid | `.mmd` | `mermaid` |
+| `sequence` | Mermaid | `.mmd` | `mermaid` |
 
 ## Canonical Naming
 
@@ -52,6 +54,8 @@ Field substitutions:
 | `flowchart` | `flowchart diagram` | `Mermaid source` | `mermaid` |
 | `state` | `state machine diagram` | `Mermaid source` | `mermaid` |
 | `c4` | `C4 context diagram` | `Structurizr DSL source` | `dsl` |
+| `er` | `ER diagram` | `Mermaid source` | `mermaid` |
+| `sequence` | `sequence diagram` | `Mermaid source` | `mermaid` |
 
 The `<details>` block is always present — even when SVG exists — so the ADR is fully readable in environments that don't render images.
 
