@@ -9,6 +9,8 @@ The POST path on the Kroki gateway depends on the source language:
 | `flowchart` | Mermaid | `/mermaid/svg` |
 | `state` | Mermaid | `/mermaid/svg` |
 | `c4` | Structurizr DSL | `/structurizr/svg` |
+| `er` | Mermaid | `/mermaid/svg` |
+| `sequence` | Mermaid | `/mermaid/svg` |
 
 ## Detection Sequence
 
@@ -38,7 +40,9 @@ If the file is absent, `kroki_url` is missing, fails validation, or the POST fai
 
 ### 2. mmdc via npx (secondary — Mermaid types only)
 
-Applies only when `--type` is `flowchart` or `state`. For `c4`, skip this step.
+Applies only when `--type` is `flowchart`, `state`, `er`, or `sequence`. For `c4`, skip this step.
+
+**Validated Mermaid baseline:** Mermaid 11.13.x. The `mermaid@11` CDN tag in `frame-template.html` resolves to the latest 11.x release at runtime; 11.13.x is the pinned version for test reproducibility across all Mermaid types (`flowchart`, `state`, `er`, `sequence`).
 
 Attempt:
 

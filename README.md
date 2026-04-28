@@ -18,7 +18,7 @@ BRAINS encodes a three-phase methodology for tackling complex software tasks:
 
 Each phase chains into the next via a user-approval gate — or, with `--autopilot`, skips those gates and runs hands-off from phase 1 through phase 3, stopping only on a `brains:needs-human` escalation. The `nurture`, `secure`, and `diagram` skills remain user-invocable for standalone use on any codebase.
 
-See [docs/diagrams.md](docs/diagrams.md) for rendered examples of the three diagram types (`flowchart`, `state`, `c4`) — including the pipeline itself as a flowchart and a C4 context diagram of the plugin's components.
+See [docs/diagrams.md](docs/diagrams.md) for rendered examples of all five diagram types (`flowchart`, `state`, `c4`, `er`, `sequence`) — including the pipeline itself as a flowchart and a C4 context diagram of the plugin's components.
 
 ## Prerequisites
 
@@ -82,7 +82,7 @@ After installing, run `/brains:setup --global` to install dependencies and confi
 | brains | `/brains:brains` | parallel | Phase 1: research + questionnaire + ADR (with auto-diagram) |
 | map | `/brains:map` | parallel | Phase 2: high-level plan + beads tasks |
 | implement | `/brains:implement` | parallel | Phase 3: teammate-per-plan-phase execution |
-| diagram | `/brains:diagram` | — | Generate Mermaid diagrams (`flowchart`/`state`/`c4`) — auto-triggered by `brains:brains` or invoked standalone |
+| diagram | `/brains:diagram` | — | Generate architecture diagrams (`flowchart`/`state`/`c4`/`er`/`sequence`) — auto-triggered by `brains:brains` or invoked standalone |
 | nurture | `/brains:nurture` | single | Review and refine (standalone or subagent) |
 | secure | `/brains:secure` | single | Security review (standalone or subagent) |
 
@@ -99,6 +99,7 @@ Most skills support three modes for LLM involvement:
 Additional flags:
 
 - `--rounds N` — number of debate rounds (default: 2, requires `--debate`).
+- `--grill` *(brains only)* — lifts the 2–4 question cap and applies a relentless-interview questionnaire policy: one question at a time with a recommended answer per question, codebase-exploration substitution (up to 1 read/turn to answer or contradict), fuzzy-term sharpening, edge-case probing, and contradiction surfacing. Termination is hybrid: a convergence detector (2 consecutive answers with no new architectural dimension) or a mandatory check-in after 8 question turns, with automatic batching to keep total turns within budget. Composes with `--single`, `--parallel`, `--debate`, `--lean`, and `--autopilot`. Applies to phase 1 only; not propagated to downstream phases.
 - `--autopilot` — orthogonal to mode; skips user gates and auto-chains phase 1 → 2 → 3. Star-chamber review still runs per selected mode and actionable feedback is auto-integrated; genuine architectural judgment calls surface as `brains:needs-human` tasks during phase 3. At the phase 1 ADR gate, `--autopilot` pre-selects *"accept ADR(s), push to origin, chain into `/brains:map --autopilot`"* (option 2 of 5). State is persisted in the plan header and honored by `/brains:implement --resume`.
 - `--lean` — orthogonal to mode and to `--autopilot`; activates the token-efficiency path introduced in v0.3. Uses a compact protocol excerpt in place of the full `multi-llm-protocol.md`, summarizes the research document via a structured `Research-Summary` block in the plan header (ADRs are ALWAYS delivered whole — never summarized), splits the `/brains:implement` skill so teammates load only the teammate-side protocol, lazy-loads `failure-recovery.md`, and scopes star-chamber context per call type. Each role loads only what its manifest in [`manifests/`](manifests/) declares. Default is off — behavior without `--lean` is byte-identical to v0.2.x. `--lean` inherits through phase chaining. Expected savings: ~30–45% of structural overhead per `--parallel --autopilot --lean` run.
 - `--teammate-model <sonnet|opus|haiku>` *(implement only)* — selects the model used to spawn per-phase teammate Claude Code instances AND their internal subagents (grooming, implementation, nurture, secure). When the orchestrator is Opus and this flag is absent, `/brains:implement` offers *"Spawn teammates using Sonnet to reduce cost? [Y/n]"* (default Y; auto-selected Y under `--autopilot`). Star-chamber invocations are unaffected. Sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku` are accepted (last one wins). The resolved tier is written into the plan header as `Teammate-model:` and read by `/brains:implement --resume`; a pre-flight summary (mode, autopilot, lean, orchestrator + teammate tier, escalation settings, phase/task counts) is displayed before any teammate is spawned — informational under `--autopilot`, `[Y/n]` confirm in interactive mode.
@@ -125,6 +126,8 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 /brains:implement --parallel                                   # Phase 3 with parallel review
 /brains:brains --autopilot "design a caching layer"           # Hands-off: phase 1 → 2 → 3
 /brains:brains --autopilot --lean "design a caching layer"    # Hands-off + token-efficiency path
+/brains:brains --grill "design a caching layer"               # Relentless-interview phase 1 (8-turn budget)
+/brains:brains --grill --autopilot "design a caching layer"   # Interview thoroughly, then go hands-off
 /brains:implement --teammate-sonnet                           # Sugar alias for --teammate-model sonnet
 /brains:implement --teammate-model opus                       # Keep teammates on Opus (no downgrade)
 /brains:implement --no-escalate-on-retry                      # Disable 3rd-retry-on-orchestrator
@@ -143,12 +146,13 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 
 `brains:diagram` generates architecture diagrams from a natural-language description and stores the source + rendered SVG side-by-side under `docs/adr/diagrams/`. The source file is canonical; the `.svg` is a derived artifact that can be regenerated any time from the source.
 
-| `--type` | Source language | Extension | Use for | Reserved for v0.5 |
-|---|---|---|---|---|
-| `flowchart` | Mermaid | `.mmd` | Processes, control flow, pipelines | |
-| `state` | Mermaid | `.mmd` | Lifecycles, state machines, transitions | |
-| `c4` | Structurizr DSL | `.dsl` | System context and container views | |
-| — | — | — | — | `sequence`, `er` |
+| `--type` | Source language | Extension | Use for |
+|---|---|---|---|
+| `flowchart` | Mermaid | `.mmd` | Processes, control flow, pipelines |
+| `state` | Mermaid | `.mmd` | Lifecycles, state machines, transitions |
+| `c4` | Structurizr DSL | `.dsl` | System context and container views |
+| `er` | Mermaid | `.mmd` | Entity-relationship models, schemas |
+| `sequence` | Mermaid | `.mmd` | Message-passing protocols, request/response flows |
 
 > **Two source languages, one skill.** Mermaid and Structurizr DSL are both rendered by the same local Kroki gateway — Mermaid via the `yuzutech/kroki-mermaid` companion container, Structurizr via the PlantUML/Structurizr engine bundled into the gateway image. The Structurizr switch for `--type c4` (v0.4.4) replaces Mermaid's experimental `C4Context` renderer, whose SVGs lacked fixed `height` attributes and rendered as broken images in GitHub.
 
@@ -179,7 +183,7 @@ docs/adr/
 
 ADRs embed the rendered image and include the source in a `<details>` block, so the ADR stays readable in environments that don't render images.
 
-See [**docs/diagrams.md**](docs/diagrams.md) for full rendered examples of all three types.
+See [**docs/diagrams.md**](docs/diagrams.md) for full rendered examples of all five types.
 
 ## Visual companion (BRAINS!)
 
@@ -216,6 +220,8 @@ brains/
 │   │       ├── flowchart.md
 │   │       ├── state.md
 │   │       ├── c4.md
+│   │       ├── er.md
+│   │       ├── sequence.md
 │   │       ├── renderer-conventions.md
 │   │       └── storage-conventions.md
 │   ├── nurture/
