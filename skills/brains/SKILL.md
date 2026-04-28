@@ -214,3 +214,4 @@ After the ADR is accepted (option 1 or 2) and the commit+push succeeds:
 
 - **`$BRAINS_PATH/references/multi-llm-protocol.md`** — shared multi-LLM invocation protocol
 - **`$BRAINS_PATH/skills/brains/references/visual-companion.md`** — visual companion guide (browser-based mockups, diagrams, comparisons)
+- **`$BRAINS_PATH/skills/brains/references/grill-protocol.md`** — `--grill` operational rules (lazy-on-demand; load only when `--grill` is active)
