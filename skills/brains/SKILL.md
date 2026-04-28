@@ -87,6 +87,14 @@ For each generated question:
 3. Adapt the remaining question set based on new information.
 4. If an answer (a) contradicts a research finding, (b) introduces a new architectural dimension, or (c) renders remaining questions interdependent in unforeseen ways: re-engage the star-chamber for question review; optionally spawn a fresh research subagent for the new dimension.
 
+**Under `--grill`**, read `$BRAINS_PATH/skills/brains/references/grill-protocol.md` (lazy-on-demand) and apply the full grill questionnaire policy. Per-turn behavior:
+
+- **Convergence check (MUST):** after each user answer, evaluate against the 5-signal operational definition of "new architectural dimension" (signals a–e in grill-protocol.md §1). Track consecutive no-new-dimension answers; two consecutive MUST trigger the convergence proceed-prompt.
+- **Codebase exploration (SHOULD):** before generating a follow-up, perform up to 1 Grep or Read call to either answer the candidate question from code or surface a contradiction with the user's stated answer. MUST continue on read failure without aborting.
+- **Fuzzy-term sharpening (SHOULD):** when the user uses an overloaded term, propose a canonical term and ask for confirmation in the next turn before incorporating it into the architecture.
+- **Edge-case probing (SHOULD):** when a domain relationship or data flow is discussed, probe with one concrete edge-case scenario before closing the topic.
+- **Contradiction surfacing (MUST):** when a codebase read reveals that the user's stated claim contradicts the actual code, surface the contradiction as the next grill question.
+
 ### 6. Architecture synthesis
 
 Produce the full architecture with up-to-date standards. Version specification is SHOULD-level — prefer MAJOR.MINOR for semver libraries; use the library's native scheme for non-semver.
