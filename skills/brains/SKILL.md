@@ -95,6 +95,15 @@ For each generated question:
 - **Edge-case probing (SHOULD):** when a domain relationship or data flow is discussed, probe with one concrete edge-case scenario before closing the topic.
 - **Contradiction surfacing (MUST):** when a codebase read reveals that the user's stated claim contradicts the actual code, surface the contradiction as the next grill question.
 
+**Termination and batching (under `--grill`):**
+
+- **Upfront message (MUST):** before presenting the first grill question, emit: _"Grilling targets 8 total question turns. If more questions arise, I'll batch them to stay within budget. After 8 turns I'll check in to see if we should proceed or keep going."_
+- **8-turn budget:** the system targets ≤ 8 total question turns. As long as anticipated total ≤ 8, ask one question per turn.
+- **Auto-batching (MUST when anticipated total > 8):** compute `batch_size = ceil(remaining / max(1, 8 - turns_used))`, clamped to `[2, 5]`. Each batched question MUST still include a recommended answer.
+- **Mandatory check-in (MUST):** once 8 turns are consumed and more than 1 question remains, emit: _"We've covered 8 question turns. Ready to proceed, or keep grilling? [y/N]"_ If the user responds `y`/`yes`/`proceed`, begin step 6. If `n`/`no`/`keep grilling`, reset the no-new-dimension streak and continue in batched mode.
+- **"1 turn left" exception (MUST):** if exactly 1 question remains when the turn-8 check-in would fire, ask that final question directly without the check-in prompt (the round-trip cost exceeds the cost of one more turn).
+- **Seed exclusion (MUST NOT):** do not batch the seed set under `--grill --parallel` or `--grill --debate`; batching applies only to follow-up questions.
+
 ### 6. Architecture synthesis
 
 Produce the full architecture with up-to-date standards. Version specification is SHOULD-level — prefer MAJOR.MINOR for semver libraries; use the library's native scheme for non-semver.
