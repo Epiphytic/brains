@@ -13,3 +13,6 @@ docs/plans/.state/
 .dolt/
 *.db
 .beads-credential-key
+
+# Hotskills per-project activation state
+.hotskills/
