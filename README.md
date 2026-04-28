@@ -18,7 +18,7 @@ BRAINS encodes a three-phase methodology for tackling complex software tasks:
 
 Each phase chains into the next via a user-approval gate — or, with `--autopilot`, skips those gates and runs hands-off from phase 1 through phase 3, stopping only on a `brains:needs-human` escalation. The `nurture`, `secure`, and `diagram` skills remain user-invocable for standalone use on any codebase.
 
-See [docs/diagrams.md](docs/diagrams.md) for rendered examples of the three diagram types (`flowchart`, `state`, `c4`) — including the pipeline itself as a flowchart and a C4 context diagram of the plugin's components.
+See [docs/diagrams.md](docs/diagrams.md) for rendered examples of all five diagram types (`flowchart`, `state`, `c4`, `er`, `sequence`) — including the pipeline itself as a flowchart and a C4 context diagram of the plugin's components.
 
 ## Prerequisites
 
@@ -82,7 +82,7 @@ After installing, run `/brains:setup --global` to install dependencies and confi
 | brains | `/brains:brains` | parallel | Phase 1: research + questionnaire + ADR (with auto-diagram) |
 | map | `/brains:map` | parallel | Phase 2: high-level plan + beads tasks |
 | implement | `/brains:implement` | parallel | Phase 3: teammate-per-plan-phase execution |
-| diagram | `/brains:diagram` | — | Generate Mermaid diagrams (`flowchart`/`state`/`c4`) — auto-triggered by `brains:brains` or invoked standalone |
+| diagram | `/brains:diagram` | — | Generate architecture diagrams (`flowchart`/`state`/`c4`/`er`/`sequence`) — auto-triggered by `brains:brains` or invoked standalone |
 | nurture | `/brains:nurture` | single | Review and refine (standalone or subagent) |
 | secure | `/brains:secure` | single | Security review (standalone or subagent) |
 
@@ -143,12 +143,13 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 
 `brains:diagram` generates architecture diagrams from a natural-language description and stores the source + rendered SVG side-by-side under `docs/adr/diagrams/`. The source file is canonical; the `.svg` is a derived artifact that can be regenerated any time from the source.
 
-| `--type` | Source language | Extension | Use for | Reserved for v0.5 |
-|---|---|---|---|---|
-| `flowchart` | Mermaid | `.mmd` | Processes, control flow, pipelines | |
-| `state` | Mermaid | `.mmd` | Lifecycles, state machines, transitions | |
-| `c4` | Structurizr DSL | `.dsl` | System context and container views | |
-| — | — | — | — | `sequence`, `er` |
+| `--type` | Source language | Extension | Use for |
+|---|---|---|---|
+| `flowchart` | Mermaid | `.mmd` | Processes, control flow, pipelines |
+| `state` | Mermaid | `.mmd` | Lifecycles, state machines, transitions |
+| `c4` | Structurizr DSL | `.dsl` | System context and container views |
+| `er` | Mermaid | `.mmd` | Entity-relationship models, schemas |
+| `sequence` | Mermaid | `.mmd` | Message-passing protocols, request/response flows |
 
 > **Two source languages, one skill.** Mermaid and Structurizr DSL are both rendered by the same local Kroki gateway — Mermaid via the `yuzutech/kroki-mermaid` companion container, Structurizr via the PlantUML/Structurizr engine bundled into the gateway image. The Structurizr switch for `--type c4` (v0.4.4) replaces Mermaid's experimental `C4Context` renderer, whose SVGs lacked fixed `height` attributes and rendered as broken images in GitHub.
 
@@ -179,7 +180,7 @@ docs/adr/
 
 ADRs embed the rendered image and include the source in a `<details>` block, so the ADR stays readable in environments that don't render images.
 
-See [**docs/diagrams.md**](docs/diagrams.md) for full rendered examples of all three types.
+See [**docs/diagrams.md**](docs/diagrams.md) for full rendered examples of all five types.
 
 ## Visual companion (BRAINS!)
 
@@ -216,6 +217,8 @@ brains/
 │   │       ├── flowchart.md
 │   │       ├── state.md
 │   │       ├── c4.md
+│   │       ├── er.md
+│   │       ├── sequence.md
 │   │       ├── renderer-conventions.md
 │   │       └── storage-conventions.md
 │   ├── nurture/
