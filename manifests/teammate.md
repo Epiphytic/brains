@@ -18,6 +18,12 @@ applies-under: --lean
   - on-demand-trigger: debate-round synthesis, provider error handling
 - `references/failure-recovery.md` (lazy-on-demand)
   - on-demand-trigger: first task failure in T3 (failure flow summary inline in teammate.md is sufficient for the happy path)
+- `references/skills-detection.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set in the initial prompt; loaded at T1.1 before the hotskills probe
+- `references/skills-invocation.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set; loaded at T1.1 after detection resolves a provider
+- `references/find-skills.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set AND the hotskills probe falls through during T1.1
 
 ## Artifacts
 - `docs/adr/*.md` (whole-always)
