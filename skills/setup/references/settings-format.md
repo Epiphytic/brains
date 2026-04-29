@@ -4,9 +4,11 @@
 
 JSON file read by skills at invocation time via the Read tool. Contains system-wide defaults.
 
+**Current schema: v0.3.0** (introduced in BRAINS v0.5.0 alongside ADR-005).
+
 ```json
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "defaults": {
     "brains": "parallel",
     "map": "parallel",
@@ -14,7 +16,13 @@ JSON file read by skills at invocation time via the Read tool. Contains system-w
     "nurture": "single",
     "secure": "single"
   },
-  "debate_rounds": 2
+  "debate_rounds": 2,
+  "flags": {
+    "skills": false,
+    "grill": false,
+    "bullets": false,
+    "accept_adrs": false
+  }
 }
 ```
 
@@ -25,6 +33,25 @@ JSON file read by skills at invocation time via the Read tool. Contains system-w
 | `version` | string | Plugin version this config was created with |
 | `defaults` | object | Default mode per skill (`single`, `parallel`, or `debate`) |
 | `debate_rounds` | number | Default number of debate rounds when `--rounds` is not specified |
+| `flags` | object | Per-flag boolean defaults. CLI flags (`--skills`, `--grill`, `--bullets`, `--accept-adrs`) and their `--no-*` opposites override these. Missing keys default to `false`. |
+
+### `flags` Object
+
+| Key | CLI override | Effect when `true` |
+|---|---|---|
+| `skills` | `--skills` / `--no-skills` | Skill discovery is enabled by default in brains/map/implement. Hotskills detection runs; falls back to vendored find-skills. |
+| `grill` | `--grill` / `--no-grill` | The relentless-interview questionnaire is on by default in `/brains:brains` phase 1. Phase-1 only — does not propagate. |
+| `bullets` | `--bullets` / `--no-bullets` | `/brains:map` defaults to serial-sweep mode (single phase, 3-6 coarse beads tasks, inline execution). Auto-detection still applies — this just biases the default when eligibility is met. |
+| `accept_adrs` | `--accept-adrs` / `--no-accept-adrs` | `--autopilot` auto-accepts ADRs at the gate without prompting. Only consequential when combined with `--autopilot`. |
+
+### Migration: v0.1.x / v0.2.x → v0.3.0
+
+The `/brains:setup --global` migration is **non-destructive**:
+- Existing values for `version`, `defaults`, `debate_rounds` are preserved.
+- The `flags` object is added with all keys defaulting to `false` ONLY if `flags` is absent.
+- If `flags` exists but is missing some keys, those keys are added (defaulting to `false`); existing keys are NOT overwritten.
+- The `version` field is bumped to `"0.3.0"`.
+- No fields are removed.
 
 ### How Skills Use Global Defaults
 

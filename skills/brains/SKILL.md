@@ -52,11 +52,11 @@ Spawn a research subagent scoped to the user's prompt. Use `Agent` with `subagen
 - Idiomatic patterns in the codebase or ecosystem
 - Prior art (blog posts, reference implementations)
 
-Output path: `docs/plans/YYYY-MM-DD-<slug>-research.md` (committed to git).
+Output path: `docs/research/YYYY-MM-DD-<slug>-research.md` (committed to git).
 
 If a research document from the same slug already exists and is younger than 24h, skip this step and reuse it.
 
-**Under `--lean`:** after writing the research document, produce a compact `research-summary` YAML block following the schema at `$BRAINS_PATH/skills/brains/references/research-summary-schema.md`. The block will be written into the plan header by `/brains:map` at phase-2 step 11; stash it alongside the research document output so phase 2 can embed it verbatim (path: `docs/plans/YYYY-MM-DD-<slug>-research-summary.yaml`, or inline in conversation state passed to the chained skill). All five fields (`libraries-and-versions`, `deprecated-apis-to-avoid`, `codebase-patterns`, `prior-art`, `constraints`) MUST be present. The full research document remains authoritative and on disk for drill-down.
+**Under `--lean`:** after writing the research document, produce a compact `research-summary` YAML block following the schema at `$BRAINS_PATH/skills/brains/references/research-summary-schema.md`. The block will be written into the plan header by `/brains:map` at phase-2 step 11; stash it alongside the research document output so phase 2 can embed it verbatim (path: `docs/research/YYYY-MM-DD-<slug>-research-summary.yaml`, or inline in conversation state passed to the chained skill). All five fields (`libraries-and-versions`, `deprecated-apis-to-avoid`, `codebase-patterns`, `prior-art`, `constraints`) MUST be present. The full research document remains authoritative and on disk for drill-down.
 
 ### 3. Question generation (mode-dependent)
 
@@ -166,7 +166,7 @@ Before chaining (options 1/2) or stopping (option 3), commit the newly produced 
 ```bash
 # Stage and commit (files listed explicitly — never `git add .`)
 git add docs/adr/YYYY-MM-DD-NNN-<slug>.md
-[[ -f docs/plans/YYYY-MM-DD-<slug>-research.md ]] && git add docs/plans/YYYY-MM-DD-<slug>-research.md
+[[ -f docs/research/YYYY-MM-DD-<slug>-research.md ]] && git add docs/research/YYYY-MM-DD-<slug>-research.md
 git commit -m "docs(adr): add ADR-NNN <title>"
 
 # Push — set upstream if the branch has none

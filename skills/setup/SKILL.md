@@ -244,11 +244,23 @@ Write the global defaults:
 mkdir -p ~/.config/brains
 ```
 
-Write `~/.config/brains/defaults.json` using the Write tool:
+**Migration logic (non-destructive merge):**
+1. If `~/.config/brains/defaults.json` does NOT exist, write the full v0.3.0 default below.
+2. If it exists, read it via the Read tool and parse the JSON.
+3. Build the merged result starting from the existing object:
+   - Set `version` to `"0.3.0"`.
+   - Preserve all existing `defaults.*` keys; add any missing skill keys with their built-in defaults (`brains: "parallel"`, `map: "parallel"`, `implement: "parallel"`, `nurture: "single"`, `secure: "single"`).
+   - Preserve `debate_rounds` if present; default to `2` if absent.
+   - If `flags` is missing entirely, add `{ "skills": false, "grill": false, "bullets": false, "accept_adrs": false }`.
+   - If `flags` exists, add only the missing keys (do NOT overwrite existing values for keys already set).
+   - Preserve any unknown top-level keys verbatim (forward-compat).
+4. Write the merged result back via the Write tool. NEVER overwrite without merging.
+
+The full v0.3.0 default (used when no prior file exists):
 
 ```json
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "defaults": {
     "brains": "parallel",
     "map": "parallel",
@@ -256,9 +268,17 @@ Write `~/.config/brains/defaults.json` using the Write tool:
     "nurture": "single",
     "secure": "single"
   },
-  "debate_rounds": 2
+  "debate_rounds": 2,
+  "flags": {
+    "skills": false,
+    "grill": false,
+    "bullets": false,
+    "accept_adrs": false
+  }
 }
 ```
+
+After the write, surface a one-line note: `"defaults.json migrated to v0.3.0 (preserved your existing values)"` if the prior file existed; `"defaults.json initialized at v0.3.0"` if it did not.
 
 ### Step 4: Verify
 
@@ -311,6 +331,21 @@ Ask the user if they want project-specific overrides:
 Create `.claude/brains.local.md` — this file is auto-loaded by Claude Code as project context, so all BRAINS skills will see these settings automatically.
 
 Read the reference at `$BRAINS_PATH/skills/setup/references/settings-format.md` for the exact format to write.
+
+The local settings body MUST include a `## Flags` section with a markdown table for boolean per-project overrides. Empty/missing rows fall through to the global default in `~/.config/brains/defaults.json` `flags`.
+
+```markdown
+## Flags
+
+| Flag | Project Default | Notes |
+|---|:---:|---|
+| `skills` |   | Enable skill discovery in brains/map/implement (CLI: `--skills` / `--no-skills`) |
+| `grill` |   | Enable relentless-interview questionnaire in `/brains:brains` phase 1 (CLI: `--grill` / `--no-grill`) |
+| `bullets` |   | Default `/brains:map` to serial-sweep mode (CLI: `--bullets` / `--no-bullets`) |
+| `accept_adrs` |   | Auto-accept ADRs under `--autopilot` (CLI: `--accept-adrs` / `--no-accept-adrs`) |
+```
+
+Leave the "Project Default" cells empty for skills the project does not override; users fill in `true` or `false` to opt in/out per project.
 
 ### Step 5: Update .gitignore
 

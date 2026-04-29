@@ -71,7 +71,7 @@ Base branches (configurable via `settings.local.json` key `brains.baseBranches`,
 Find accepted ADR(s) in `docs/adr/` matching the topic (by filename pattern or by user-selection if ambiguous) — ADRs are ALWAYS loaded whole, under all modes including `--lean`.
 
 **Research document loading depends on `--lean`:**
-- **Non-lean (default):** read the full research document at `docs/plans/<slug>-research.md`. Preserves v0.2.x behavior.
+- **Non-lean (default):** read the full research document at `docs/research/<slug>-research.md` (legacy fallback: `docs/plans/<slug>-research.md` for pre-v0.5 ADR runs). Preserves v0.2.x reading behavior.
 - **Under `--lean`:** read only the `research-summary` block stashed by phase 1 (per `$BRAINS_PATH/skills/brains/references/research-summary-schema.md`). Drill down into the full research document only when a summary field is empty-but-relevant, when a task is flagged `risk:high` during grooming, or when `--ignore-research-summary` was passed.
 
 Codebase exploration policy:
