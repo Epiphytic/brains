@@ -2,7 +2,7 @@
 name: map
 description: This skill should be used when the user asks to "map out the plan", "create the implementation plan", "outline the tasks", "plan it out", "sketch the implementation", or invokes "/brains:map". Phase 2 of the BRAINS pipeline: high-level plan generation (no implementation specifics), topic-slug derivation, optional branch creation, beads task creation with brains:-prefixed labels, and user approval gate. Supports --single, --parallel (default), and --debate modes for plan review, plus an optional --autopilot flag that skips user gates and auto-chains into /brains:implement --autopilot. Chains into /brains:implement at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--skills|--no-skills] [--rounds N] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--skills|--no-skills] [--bullets|--no-bullets] [--rounds N] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -41,7 +41,7 @@ Autopilot is propagated downstream — the inherited state is persisted in the p
 
 ### 1. Parse arguments
 
-Parse mode, `--autopilot`, `--lean`, `--skills` / `--no-skills`, rounds, and topic. If no topic and no prior phase 1 output exists, ask the user. If chained from phase 1, inherit the mode, autopilot state, `--lean` state, and `--skills` state.
+Parse mode, `--autopilot`, `--lean`, `--skills` / `--no-skills`, `--bullets` / `--no-bullets`, rounds, and topic. If no topic and no prior phase 1 output exists, ask the user. If chained from phase 1, inherit the mode, autopilot state, `--lean` state, and `--skills` state.
 
 `--grill` MUST be rejected with a clear error and a non-zero exit. Print: *"--grill is phase-1 only; use /brains:brains --grill instead"* and stop. `--grill` does not propagate from phase 1 either (per ADR-005 req 23).
 
@@ -53,6 +53,13 @@ Parse mode, `--autopilot`, `--lean`, `--skills` / `--no-skills`, rounds, and top
 4. **Built-in default** — `false`.
 
 When the resolved value is `true`, this skill follows `$BRAINS_PATH/references/skills-detection.md` and `$BRAINS_PATH/references/skills-invocation.md`. The vendored `$BRAINS_PATH/references/find-skills.md` is read only when the find-skills fallback fires.
+
+**Flag resolution for `--bullets`** (per ADR-005 reqs 44, 49): same 4-layer precedence, top-to-bottom — first definitive value wins:
+
+1. **Explicit CLI flag** — `--bullets` / `--no-bullets` on the command line wins.
+2. **`.claude/brains.local.md` Flags table** — `bullets` row with `true` or `false`.
+3. **`~/.config/brains/defaults.json` `flags.bullets`** — boolean.
+4. **Built-in default** — `false` (auto-detection in step 5 may still flip the resolved value to `true` when the standard heuristic holds; `--no-bullets` always wins and forces standard shape).
 
 In autopilot, if a topic is truly missing and no prior phase 1 output exists, do NOT stall waiting for input — stop with a `brains:needs-human` style message to the user explaining that `/brains:map --autopilot` requires either a topic argument or a prior phase 1 output.
 
@@ -98,6 +105,22 @@ Spawn a planning subagent with a prompt that emphasizes:
 - Identify inter-task dependencies
 - Group into phases if >12 tasks (target: each phase independently testable)
 - Include acceptance criteria per task
+
+#### 5a. Serial-sweep eligibility (per ADR-005 reqs 44-47)
+
+Before (or alongside) plan generation, evaluate the three-condition heuristic:
+
+- **(a)** The ADR introduces no new external dependencies or services.
+- **(b)** All work is topologically serial — no parallel-independent streams.
+- **(c)** No `risk:high` markers AND no architectural unknowns surfaced by grooming.
+
+Pass these conditions into the planning subagent's prompt and ask it to return a verdict line `bullets-eligible: true | false` alongside the plan. Resolve the effective bullets state:
+
+- If `--no-bullets` is the resolved CLI/config value, force standard multi-phase shape regardless of the verdict.
+- Else if `--bullets` is the resolved CLI/config value OR the verdict is `bullets-eligible: true`, set the effective state to **bullets** and instruct the subagent to emit the plan in **serial-sweep shape**: 1 plan-phase (or at most 2 with a clear setup/teardown split), 3–6 coarse beads tasks, each with a markdown bullet checklist body of constituent file-level steps. See `$BRAINS_PATH/skills/map/references/plan-format.md` § "Serial Sweep Mode (bullets)".
+- Otherwise, use the standard multi-phase shape (existing behavior).
+
+If grooming downstream surfaces `risk:high` or new architectural unknowns, the skill MUST escalate back to standard multi-phase shape with a one-line warning to the user (per ADR-005 req 47).
 
 Output path: `docs/plans/YYYY-MM-DD-<slug>-map.md`. This file IS overwritten on every phase-2 run. Do not preserve prior map documents — the plan is the tracker, not the archive. ADRs and research documents remain immutable.
 
@@ -152,6 +175,12 @@ Skip the link block silently when no GitHub remote exists. Push failures should 
   - **(Conditional) Accept and skip teammate spawn** — available ONLY when all three are true: plan has <10 total tasks; all tasks fit in a single plan-phase; no task is flagged `risk:high` during grooming (check the per-task grooming annotations, or run a lightweight grooming pass now if not yet performed). When accepted, create the beads tasks (step 9) and then proceed to inline implementation in the CURRENT session without invoking `/brains:implement`. Execute tasks directly; run `/brains:nurture --scope phase-1` and `/brains:secure --scope phase-1` at the end.
 - **Autopilot:** skip the gate. Proceed directly to task creation and chain to `/brains:implement --autopilot`. Autopilot NEVER auto-selects the skip-teammate-spawn option — it continues to chain through the full pipeline. Emit a one-line status update summarizing the plan (phase count, task count, any star-chamber findings that were integrated).
 
+**Bullets-mode override (per ADR-005 req 47):** when the effective state from step 5a is bullets, the gate behavior changes:
+
+- **Interactive `--bullets`:** still present the gate, but pre-select "Accept and skip teammate spawn" as the recommended option (option 3 / inline) and label it as such. The eligibility constraints in the third bullet above (<10 tasks, single plan-phase, no `risk:high`) are satisfied by construction in serial-sweep mode, so the conditional option is always available.
+- **`--autopilot --bullets`:** skip the gate prompt entirely (autopilot already gates prompts) and proceed directly to the inline-execution path in the current orchestrator session — do NOT spawn a teammate, do NOT chain `/brains:implement --autopilot`. After task creation, execute the plan inline and run `/brains:nurture --scope phase-1` and `/brains:secure --scope phase-1` at the end.
+- If grooming subsequently surfaces `risk:high` or new architectural unknowns, escalate back to standard multi-phase shape with a one-line warning and resume the standard gate/teammate-spawn behavior.
+
 ### 8. Task tracker selection
 
 Follow `$BRAINS_PATH/references/beads-integration.md` § Tracker Selection.
@@ -180,6 +209,7 @@ Update the map document to include the following frontmatter/header fields:
 **Autopilot:** <true | false>
 **Accept-ADRs:** <true | false>
 **Lean:** <true | false>
+**Bullets:** <true | false>
 **Teammate-model:** <sonnet | opus | haiku | (unset — /brains:implement will resolve and write back)>
 **Branch:** <branch name>
 
@@ -203,7 +233,7 @@ research-summary:
 -->
 ```
 
-The `Mode:`, `Autopilot:`, `Accept-ADRs:`, `Lean:`, and `Teammate-model:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, `--lean`, `--teammate-model opus`, or the sugar aliases `--teammate-opus` / `--teammate-sonnet` / `--teammate-haiku`). On first phase-2 run, `Teammate-model:` MAY be left empty if the user has not chosen a tier; `/brains:implement` resolves the default per step 1b and writes the decision back to the plan header before launching the first teammate.
+The `Mode:`, `Autopilot:`, `Accept-ADRs:`, `Lean:`, `Bullets:`, and `Teammate-model:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, `--lean`, `--teammate-model opus`, or the sugar aliases `--teammate-opus` / `--teammate-sonnet` / `--teammate-haiku`). On first phase-2 run, `Teammate-model:` MAY be left empty if the user has not chosen a tier; `/brains:implement` resolves the default per step 1b and writes the decision back to the plan header before launching the first teammate.
 
 ## Phase Transition
 
