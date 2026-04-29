@@ -85,16 +85,20 @@ Implement ADR-005 in three plan-phases:
   - Depends on: T-2.1
   - Acceptance: `skills/brains/SKILL.md` step 1 parses `--accept-adrs`. Step 9 logic: when `--autopilot` is set WITHOUT `--accept-adrs`, present the ADR gate normally and await user input; when `--autopilot --accept-adrs` are both set, auto-select option 2. The argument-hint frontmatter line includes `[--accept-adrs]`. `skills/map/SKILL.md` step 11 plan-header schema adds `Accept-ADRs: <true|false>` field; `skills/implement/SKILL.md` reads it on `--resume` consistently with `Autopilot:`. README "Additional flags" subsection documents `--accept-adrs` (covered by T-3.5 extension).
 
-- [ ] **T-2.11**: Hoist branch-creation logic from `/brains:map` step 3 into `/brains:brains` step 9
+- [ ] **T-2.11**: Hoist branch-creation + auto-create draft PR in `/brains:brains` step 9
   - Depends on: T-2.10
-  - Acceptance: `skills/brains/SKILL.md` step 9 (BEFORE the commit+push subprocess) checks if the user is on a base branch (`main`/`master`/`develop` or any branch in `settings.local.json` `brains.baseBranches`); if so, in interactive mode prompts to create `brains/<slug>` and switch, in `--autopilot` mode auto-creates and switches without prompting. The branch-creation block in `skills/map/SKILL.md` step 3 becomes a no-op fallback that fires only when the current branch is still a base branch (covering standalone `/brains:map` invocation). After the ADR commit+push, `skills/brains/SKILL.md` step 9 prints the GitHub PR-creation URL (`gh pr create --draft` invocation hint) when a GitHub remote is detected; this is OPTIONAL and skipped silently when `gh` is missing or no GitHub remote exists.
+  - Acceptance: `skills/brains/SKILL.md` step 9 (BEFORE the commit+push subprocess) checks if the user is on a base branch (`main`/`master`/`develop` or any branch in `settings.local.json` `brains.baseBranches`); if so, in interactive mode prompts to create `brains/<slug>` and switch, in `--autopilot` mode auto-creates and switches without prompting. The branch-creation block in `skills/map/SKILL.md` step 3 becomes a no-op fallback that fires only when the current branch is still a base branch (covering standalone `/brains:map` invocation). AFTER the ADR commit+push, IF `command -v gh` succeeds AND `git remote get-url origin` matches `github.com`, the skill auto-runs `gh pr create --draft --title "<ADR title>" --body-file <ADR path>`; suppresses `already exists` errors with a one-line log; surfaces the PR URL. Skipped silently when `gh` missing or no GitHub remote.
+
+- [ ] **T-2.13**: Add `gh pr ready` transition to `/brains:implement` wrap-up
+  - Depends on: T-2.11
+  - Acceptance: `skills/implement/SKILL.md` step 7 (wrap-up) adds a final block: when wrap-up has `Paused: false` AND no `brains:needs-human` outstanding AND `command -v gh` succeeds AND a PR exists for the current branch (`gh pr view --head $(git branch --show-current) --json number -q .number`), run `gh pr ready <number>`. Failures (already-ready, no PR) logged not blocking. Skipped silently when `gh` missing or no GitHub remote.
 
 - [ ] **T-2.12**: Add CI status check to grooming (T2) in `skills/implement/teammate.md`
   - Depends on: T-2.6 (teammate.md already touched in phase 2)
   - Acceptance: `skills/implement/teammate.md` T2 grooming subagent prompt is extended to include a final post-grooming step: AFTER swapping `brains:ready-for-grooming` for `brains:groomed`, IF `git remote get-url origin` matches `github.com` AND `command -v gh` succeeds, run `gh run list --limit 10 --branch $(git branch --show-current) --json status,conclusion,name,databaseId,createdAt`. For each failed run (`conclusion in [failure, timed_out, action_required, cancelled]`), check whether the same workflow was failing on `git rev-parse HEAD~1`; if NOT pre-existing, file `bd create --title "Investigate CI failure: <workflow>" --type=bug --priority=2 --label brains:topic:<slug> --label brains:phase-<N+1> --label ci-failure` (or `brains:cleanup` if N is the final phase). MUST NOT wait for in-flight runs. MUST NOT block grooming. Skipped silently when `gh` missing or no GitHub remote.
 
 - [ ] **T-2.8** (Nurture): `Nurture: phase 2`
-  - Depends on: T-2.1, T-2.2, T-2.3, T-2.4, T-2.5, T-2.6, T-2.7, T-2.10, T-2.11, T-2.12
+  - Depends on: T-2.1, T-2.2, T-2.3, T-2.4, T-2.5, T-2.6, T-2.7, T-2.10, T-2.11, T-2.12, T-2.13
   - Acceptance: `docs/plans/2026-04-28-brains-skills-integration-phase-2-nurture.md` exists with `Issues Fixed` section. All argument-hint frontmatter lines updated; README flag list updated for skills plumbing; CHANGELOG entry added.
 
 - [ ] **T-2.9** (Secure): `Secure: phase 2`
