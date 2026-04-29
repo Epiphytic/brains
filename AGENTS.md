@@ -2,6 +2,21 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## Vendored documentation maintenance
+
+This plugin vendors external instruction documents under `references/` so the BRAINS skills can fall back to a local copy when the external source is unavailable. Vendored docs MUST be refreshed periodically from upstream.
+
+| File | Upstream | Refresh policy |
+|---|---|---|
+| `references/find-skills.md` | `https://raw.githubusercontent.com/vercel-labs/skills/main/skills/find-skills/SKILL.md` | SHOULD refresh on each BRAINS minor release; nurture MAY file `brains:nurture:vendored-docs-refresh` ticket if older than 90 days |
+
+**Refresh procedure:**
+1. `curl -sSL <upstream URL> > /tmp/find-skills-upstream.md`
+2. Get current SHA: `curl -sSL "https://api.github.com/repos/<owner>/<repo>/commits?path=<file>&per_page=1" | jq -r '.[0].sha'`
+3. Replace the body of the vendored file (everything after the maintenance header `---` separator) with the upstream content.
+4. Update the maintenance header: `Vendor SHA`, `Vendor date`.
+5. Commit with `docs(refs): refresh vendored find-skills.md`.
+
 ## Quick Reference
 
 ```bash
