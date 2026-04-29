@@ -112,6 +112,7 @@ Read the plan document. Extract:
 - Slug
 - Mode (may be overridden by CLI arg)
 - Autopilot (may be overridden by CLI arg — presence of `--autopilot` flag sets true; absence on `--resume` keeps the persisted value)
+- **Accept-ADRs** (`Accept-ADRs: true | false`; per ADR-005 req 35 — read on `--resume` so a run that explicitly accepted ADRs without manual review continues consistently. CLI override wins: an explicit `--accept-adrs` / `--no-accept-adrs` on `--resume` supersedes the persisted value.)
 - Lean (may be overridden by CLI arg)
 - **Skills** (`Skills: true | false`; may be overridden by CLI `--skills` / `--no-skills` — CLI wins on `--resume`)
 - Branch (warn if current branch differs)
@@ -248,6 +249,42 @@ Wrap-up structure:
 ```
 
 Summarize the wrap-up to the user and close any remaining teammate panes.
+
+#### 7a. Transition draft PR to ready (per ADR-005 req 37a)
+
+AFTER the wrap-up document is written, IF ALL of the following conditions hold, transition the PR from draft to ready:
+
+1. The wrap-up has `Paused: false` (i.e., this is a clean completion, not a paused exit).
+2. No `brains:needs-human` tasks are outstanding for this topic — verify with: `bd list --label brains:topic:<slug> --label brains:needs-human --status=open` returns empty.
+3. `command -v gh` succeeds AND a PR exists for the current branch — verify with: `gh pr view --head $(git branch --show-current) --json number -q .number 2>/dev/null` returns a number.
+
+When all conditions hold:
+
+```bash
+SLUG="<slug>"
+CURRENT_BRANCH=$(git branch --show-current)
+
+# Condition 2
+NEEDS_HUMAN=$(bd list --label "brains:topic:$SLUG" --label brains:needs-human --status=open 2>/dev/null)
+
+# Condition 3
+PR_NUMBER=""
+if command -v gh >/dev/null 2>&1; then
+  PR_NUMBER=$(gh pr view --head "$CURRENT_BRANCH" --json number -q .number 2>/dev/null || true)
+fi
+
+if [[ -z "$NEEDS_HUMAN" ]] && [[ -n "$PR_NUMBER" ]]; then
+  READY_OUTPUT=$(gh pr ready "$PR_NUMBER" 2>&1) || true
+  if echo "$READY_OUTPUT" | grep -q 'already in "ready" state'; then
+    echo "PR #$PR_NUMBER already marked ready; skipping"
+  fi
+  # Surface the PR URL either way for the user
+  PR_URL=$(gh pr view "$PR_NUMBER" --json url -q .url 2>/dev/null || true)
+  [[ -n "$PR_URL" ]] && echo "PR ready for review: $PR_URL"
+fi
+```
+
+Skip silently when `gh` is missing, no GitHub remote exists, or no PR exists for the current branch. Failures (other than already-ready) MUST be logged but MUST NOT block wrap-up.
 
 ## Teammate-Side Protocol
 

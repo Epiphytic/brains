@@ -64,6 +64,8 @@ Convert the topic to kebab-case lowercase. Example: *"add a health-check endpoin
 
 ### 3. Branch offer
 
+**Note:** When chained from `/brains:brains` (the common case), step 9 of phase 1 has already moved the user to a topic branch — this step is a no-op fallback for standalone `/brains:map` invocations on a base branch (per ADR-005 req 38).
+
 Determine the current branch:
 
 ```bash
@@ -111,6 +113,39 @@ In `--autopilot`, star-chamber feedback (when applicable) is integrated without 
 
 ### 7. User gate
 
+#### 7a. Commit + push plan, surface link (per ADR-005 req 37c)
+
+BEFORE presenting the gate options or showing the plan summary (interactive), AND in autopilot before the inline status update, the skill MUST commit + push the plan document so the user can review it on GitHub. This also applies to out-of-band plan-review requests where the user interrupts autopilot mid-flight to revise the plan.
+
+```bash
+PLAN_PATH="docs/plans/YYYY-MM-DD-<slug>-map.md"
+CURRENT_BRANCH=$(git branch --show-current)
+
+# Commit only when there are unstaged or staged changes to the plan file
+if ! git diff --quiet -- "$PLAN_PATH" || ! git diff --cached --quiet -- "$PLAN_PATH"; then
+  git add "$PLAN_PATH"
+  git commit -m "docs(plan): map <slug>"
+fi
+
+# Push — set upstream if the branch has none
+if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  git push
+else
+  git push -u origin "$CURRENT_BRANCH"
+fi
+```
+
+After a successful push, IF `git remote get-url origin` contains the substring `github.com`, surface a clickable GitHub link (same derivation pattern as `skills/brains/SKILL.md` step 9 sub-step (d) — handle both `https://` and `git@github.com:` remote forms; strip trailing `.git`):
+
+```
+Plan doc:
+- https://<host>/<owner>/<repo>/blob/<branch>/<plan-path>
+```
+
+Skip the link block silently when no GitHub remote exists. Push failures should be surfaced to the user (do NOT bypass hooks or force-push); offer retry / skip-push-and-continue / abort, mirroring the phase-1 commit+push handling.
+
+#### 7b. Present gate options
+
 - **Interactive:** Present the plan. Options:
   - **Reject:** revise in place, re-present. Stay within phase 2.
   - **Accept:** proceed to task creation, then chain to `/brains:implement`.
@@ -143,6 +178,7 @@ Update the map document to include the following frontmatter/header fields:
 **Research:** <research doc path>
 **Mode:** <--single | --parallel | --debate>
 **Autopilot:** <true | false>
+**Accept-ADRs:** <true | false>
 **Lean:** <true | false>
 **Teammate-model:** <sonnet | opus | haiku | (unset — /brains:implement will resolve and write back)>
 **Branch:** <branch name>
@@ -167,7 +203,7 @@ research-summary:
 -->
 ```
 
-The `Mode:`, `Autopilot:`, `Lean:`, and `Teammate-model:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, `--lean`, `--teammate-model opus`, or the sugar aliases `--teammate-opus` / `--teammate-sonnet` / `--teammate-haiku`). On first phase-2 run, `Teammate-model:` MAY be left empty if the user has not chosen a tier; `/brains:implement` resolves the default per step 1b and writes the decision back to the plan header before launching the first teammate.
+The `Mode:`, `Autopilot:`, `Accept-ADRs:`, `Lean:`, and `Teammate-model:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, `--lean`, `--teammate-model opus`, or the sugar aliases `--teammate-opus` / `--teammate-sonnet` / `--teammate-haiku`). On first phase-2 run, `Teammate-model:` MAY be left empty if the user has not chosen a tier; `/brains:implement` resolves the default per step 1b and writes the decision back to the plan header before launching the first teammate.
 
 ## Phase Transition
 
