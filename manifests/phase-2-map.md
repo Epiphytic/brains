@@ -13,6 +13,14 @@ applies-under: --lean
 - `references/beads-integration.md` (full)
   - loaded at step 8 (tracker selection) and step 9 (task creation)
 - `skills/map/references/plan-format.md` (full, if present)
+- `references/find-skills.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set AND hotskills probe falls through during step 5 (codebase exploration refresher)
+- `references/skills-detection.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set; loaded once per session before the hotskills probe
+- `references/skills-invocation.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set; loaded after detection resolves a provider
+- `skills/brains/references/research-summary-schema.md` (full, if present)
+  - loaded under `--lean` when reading the Research-Summary block embedded in the plan header
 
 ## Artifacts
 - `docs/adr/*.md` (whole-always)

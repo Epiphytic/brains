@@ -15,6 +15,12 @@ applies-under: --lean
 - `references/multi-llm-protocol.md` (lazy-on-demand)
 - `references/failure-recovery.md` (lazy-on-demand)
   - on-demand-trigger: a teammate surfaces `brains:needs-human` (step 5c) or user-response timeout (step 5d)
+- `references/skills-detection.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set; loaded once per session before the hotskills probe and propagated to teammate prompts
+- `references/skills-invocation.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set; loaded after detection resolves a provider
+- `skills/implement/teammate.md` (full, reference-only)
+  - inlined into the teammate initial-prompt template at step 5a; master never executes the T1–T6 flow
 
 ## Artifacts
 - `docs/adr/*.md` (whole-always)
