@@ -86,6 +86,45 @@ The `--skills --autopilot` safety contract: rely on hotskills' `gate_status=allo
 
 30. The vendored `references/find-skills.md` SHOULD be refreshed at each BRAINS minor release. The `nurture` skill of the BRAINS plugin's own development MAY file a `bd create` task labelled `brains:nurture:vendored-docs-refresh` whenever a release-prep nurture run notices the vendored copy is older than 90 days.
 
+### Research document path migration
+
+31. Research documents produced by `/brains:brains` step 2 MUST be written to `docs/research/YYYY-MM-DD-<slug>-research.md` (NEW canonical path) — not `docs/plans/`. The `docs/plans/` directory is reserved for in-flight planning artifacts (map, phase reports, wrap-up, paused state); `docs/research/` is the immutable archive of phase-1 exploration.
+32. The phase-1 SKILL.md, phase-2 SKILL.md, the research-summary stash path under `--lean`, and any research-staleness check in phase 2 MUST be updated to use `docs/research/` for new files. Existing research documents in `docs/plans/` are NOT migrated automatically; the migration of pre-existing files is performed once during phase 1 of this ADR's implementation (in-scope, listed as a task) and SHOULD be a no-op for new ADR runs.
+
+### Autopilot ADR gate (HITL preserved by default)
+
+33. `/brains:brains --autopilot` MUST still present the ADR gate (step 9) and wait for user input by default. Autopilot bypasses the plan gate (`/brains:map` step 7) and per-phase implementation gates, but NOT the ADR review gate. ADRs encode architectural commitments too consequential to auto-accept blindly.
+34. A new flag `--accept-adrs` MUST be accepted by `/brains:brains` (and propagate to chained `/brains:map` and `/brains:implement` if relevant). When `--autopilot --accept-adrs` are both set, the skill MUST auto-select option 2 at the ADR gate (the prior `--autopilot` semantics). When `--autopilot` is set without `--accept-adrs`, the skill MUST present the gate normally and await user input.
+35. The `--accept-adrs` state MUST be persisted in the plan header as `Accept-ADRs: true | false` so `/brains:implement --resume` honors the setting consistently with `--autopilot`.
+
+### ADR push to topic branch (PR-style review)
+
+36. When phase 1 commits an ADR (step 9, options 1-3), the commit MUST land on a topic branch (`brains/<slug>` or any non-base branch) — not on a base branch (`main`/`master`/`develop`). If the user is on a base branch when phase 1 reaches step 9, the skill MUST offer (or, in `--autopilot`, auto-create) the topic branch BEFORE the ADR commit. This is the same branch-offer logic that currently lives in `/brains:map` step 3, hoisted into phase 1.
+37. After the ADR is committed and pushed, IF `command -v gh` succeeds AND the origin remote matches `github.com`, the skill MUST auto-create a draft PR via `gh pr create --draft --title "<ADR title>" --body-file <ADR path>` (or equivalent body construction). The skill MUST suppress duplicate-PR errors (e.g., output containing `already exists`) and log a one-line note instead. The skill MUST surface the resulting PR URL to the user. Skip silently when `gh` is missing or no GitHub remote exists.
+37a. At successful completion of `/brains:implement` (all plan-phases closed, wrap-up written, no `brains:needs-human` label outstanding, `Paused: false` in wrap-up), the skill MUST transition the PR from draft to ready via `gh pr ready <number>` (find via `gh pr view --head <current-branch> --json number -q .number`). The skill MUST skip silently when `gh` is missing, no GitHub remote, or no PR exists for the current branch. Failures (e.g., already-ready PR) MUST be logged but not block wrap-up.
+
+37b. At the ADR gate (step 9), AFTER commit+push and the optional draft-PR creation but BEFORE presenting the gate options, the skill MUST surface clickable GitHub links to each newly created ADR file on the current branch. URL format: `https://<host>/<owner>/<repo>/blob/<branch>/<adr-path>` derived from `git remote get-url origin` + `git branch --show-current`. If a draft PR was auto-created in 37, the PR URL MUST also be surfaced. Format as a labeled list ("Review ADRs:" then bullets, with the PR URL as a separate "Draft PR:" line). Skipped silently when no GitHub remote exists.
+
+37c. At the plan gate (`/brains:map` step 7), AND any out-of-band plan-review request (e.g., user interrupts autopilot to add requirements that change the plan), the skill MUST commit + push the plan to the current branch BEFORE presenting the gate options or showing the plan summary. AFTER push, the skill MUST surface a clickable GitHub link to the plan document ("Plan doc:" label with URL of the format `https://<host>/<owner>/<repo>/blob/<branch>/<plan-path>`). Same derivation pattern as 37b. Skipped silently when no GitHub remote exists.
+
+### `/brains:map` serial-sweep mode (bullets)
+
+44. `/brains:map` MUST accept a new `--bullets` flag (and a `--no-bullets` opt-out) that switches the plan output to "serial sweep mode": a single plan-phase containing 3–6 coarse beads tasks, each with a markdown bullet checklist body of constituent file-level steps.
+45. `/brains:map` MUST auto-detect serial-sweep eligibility when all three conditions hold: (a) no new external dependencies or services introduced by the ADR; (b) all work is topologically serial (no parallel-independent streams); (c) no `risk:high` markers AND no architectural unknowns surfaced by grooming. Auto-detection MAY be overridden with `--no-bullets` to force the standard multi-phase shape; `--bullets` forces serial-sweep regardless of auto-detection.
+46. Under serial-sweep mode, `/brains:map` MUST still create beads tasks (3–6 per plan) at coarser granularity. Each task body MUST contain a markdown bullet checklist of constituent file-level steps. Standard labels (`brains:topic:<slug>`, `brains:phase-1`, `brains:ready-for-grooming`) apply identically. The plan-phase count MUST be 1 (or at most 2 if there is a clear setup/teardown split).
+47. Under serial-sweep mode, the user gate (step 7) MUST default to "Accept and skip teammate spawn" — implementation runs inline in the current orchestrator session (or the chained orchestrator session in the `--autopilot` path). Grooming MUST still run as a final eligibility gate; if grooming surfaces `risk:high` or new architectural unknowns, the skill MUST escalate back to standard multi-phase shape with a one-line warning to the user.
+48. `skills/map/references/plan-format.md` MUST be extended with a "Serial Sweep Mode" section documenting the alternative output shape and the eligibility heuristic.
+49. The plan header field `Bullets: <true | false>` MUST be added so `/brains:implement --resume` honors the inline-execution choice consistently with `Autopilot:` and `Lean:`.
+38. `/brains:map` step 3 MUST be updated to be a no-op when phase 1 already moved the user to a topic branch (the common case under the new flow). It still applies in the standalone `/brains:map` invocation path where phase 1 was skipped.
+
+### CI status check during grooming
+
+39. Each phase's grooming subagent (T2 in `teammate.md`) MUST, at the END of grooming, perform a quick CI status check IF (a) the repo has a GitHub remote (`git remote get-url origin` matches `github.com`) AND (b) the `gh` CLI is installed (`command -v gh`). The check uses `gh run list --limit 10 --branch <current-branch> --json status,conclusion,name,databaseId,createdAt` (or equivalent).
+40. The grooming subagent MUST NOT wait for in-flight runs to finish. The check is read-only and reports current state only.
+41. For each failed run (`conclusion in [failure, timed_out, action_required, cancelled]`), the grooming subagent MUST check whether that workflow was already failing on the immediate parent commit (`git rev-parse HEAD~1`). If yes, do nothing (pre-existing failure, not introduced by this work). If no (new failure introduced by this phase or its baseline), file a beads task: `bd create --title "Investigate CI failure: <workflow name>" --type=bug --priority=2`, label it with `brains:topic:<slug>` AND `brains:phase-<N+1>` (next phase) OR `brains:cleanup` if this is the final phase, AND `ci-failure`.
+42. If `gh` is missing OR the repo has no GitHub remote, the grooming subagent MUST log a one-line note (`"CI check skipped: <gh missing | no GitHub remote>"`) and continue. CI checks MUST NOT block grooming completion.
+43. The CI check MUST run after grooming (after `brains:ready-for-grooming` → `brains:groomed` label swap completes), so the investigation tickets it files do NOT enter the current phase's groomed task list.
+
 ## Rationale
 
 **Why probe instead of config-marker for hotskills detection.** A config file is "was it installed at any point" — not "is it usable now." A probe is the only signal that catches plugin-disabled, MCP-server-down, and version-mismatch failures in one call. Combining the tool-name presence check with the `hotskills.list` probe is cheap (zero extra cost when the tool is absent — no spurious tool call), and yields a definitive "yes/no" without subprocess overhead.

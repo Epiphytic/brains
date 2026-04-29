@@ -21,12 +21,20 @@ applies-under: --lean
   - on-demand-trigger: diagram generation (type: flowchart)
 - `skills/diagram/references/state.md` (lazy-on-demand)
   - on-demand-trigger: diagram generation (type: state)
-- `skills/diagram/references/c4.md` (lazy-on-demand)
+- `skills/diagram/references/structurizr.md` (lazy-on-demand)
   - on-demand-trigger: diagram generation (type: c4)
 - `skills/diagram/references/storage-conventions.md` (lazy-on-demand)
   - on-demand-trigger: diagram generation
 - `skills/diagram/references/renderer-conventions.md` (lazy-on-demand)
   - on-demand-trigger: diagram generation
+- `references/find-skills.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set AND hotskills probe falls through (step 1 / question-generation external research)
+- `references/skills-detection.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set; loaded once per session before the hotskills probe
+- `references/skills-invocation.md` (lazy-on-demand)
+  - on-demand-trigger: `--skills` set; loaded after detection resolves a provider
+- `skills/brains/references/grill-protocol.md` (lazy-on-demand)
+  - on-demand-trigger: `--grill` set (steps 3 and 5)
 
 ## Artifacts
 - `docs/plans/YYYY-MM-DD-<slug>-research.md` (full)

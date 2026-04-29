@@ -2,7 +2,7 @@
 name: implement
 description: This skill should be used when the user asks to "implement the plan", "execute the plan", "start implementation", "build the tasks", "run the teammates", or invokes "/brains:implement". Phase 3 of the BRAINS pipeline: spawns a teammate Claude Code instance per plan-phase via agent-teams (preferred) or tmux (fallback), waits on beads state, handles task failures with two-strike-plus-human-in-loop flow. Supports --single, --parallel (default), and --debate modes for nurture/secure review within each plan-phase, plus an optional --autopilot flag that runs hands-off across phases until a needs-human ticket or direct user intervention stops it. Also supports --resume to pick up after a pause.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--teammate-model <sonnet|opus|haiku> | --teammate-opus | --teammate-sonnet | --teammate-haiku] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--accept-adrs|--no-accept-adrs] [--lean] [--skills|--no-skills] [--teammate-model <sonnet|opus|haiku> | --teammate-opus | --teammate-sonnet | --teammate-haiku] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -47,7 +47,17 @@ Autopilot state is persisted in the plan header (`Autopilot: true`) and read by 
 
 ### 1. Parse arguments
 
-Parse mode, `--autopilot`, `--lean`, `--teammate-model <sonnet|opus|haiku>` (and sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku`), `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+Parse mode, `--autopilot`, `--accept-adrs` / `--no-accept-adrs`, `--lean`, `--skills` / `--no-skills`, `--teammate-model <sonnet|opus|haiku>` (and sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku`), `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+
+**Flag resolution for `--skills`** (per ADR-005 reqs 18-19): 5-layer precedence (the standard 4 layers plus a `--resume` plan-header lookup) — first definitive value wins:
+
+1. **Explicit CLI flag** — `--skills` / `--no-skills` on the command line wins, including on `--resume`.
+2. **Plan header** — on `--resume`, the persisted `Skills:` field in the plan header (see step 2) is consulted next.
+3. **`.claude/brains.local.md` Flags table** — `skills` row with `true` or `false`.
+4. **`~/.config/brains/defaults.json` `flags.skills`** — boolean.
+5. **Built-in default** — `false`.
+
+When the resolved value is `true`, this skill follows `$BRAINS_PATH/references/skills-detection.md` and `$BRAINS_PATH/references/skills-invocation.md`. The flag is propagated to spawned teammates as raw text in the initial prompt (mirroring `--lean`); each teammate re-probes hotskills locally per `references/skills-detection.md`.
 
 `--lean` activates the token-efficiency path: teammates receive only `skills/implement/teammate.md` (not the full master skill body); the compact multi-llm-protocol excerpt is inlined rather than read from the full reference; `failure-recovery.md` is lazy-loaded on first task failure; role-scoped context is loaded per `$BRAINS_PATH/manifests/master-implement.md`, `manifests/teammate.md`, `manifests/nurture.md`, and `manifests/secure.md`. Default off (byte-identical to prior behavior).
 
@@ -102,6 +112,9 @@ Read the plan document. Extract:
 - Slug
 - Mode (may be overridden by CLI arg)
 - Autopilot (may be overridden by CLI arg — presence of `--autopilot` flag sets true; absence on `--resume` keeps the persisted value)
+- **Accept-ADRs** (`Accept-ADRs: true | false`; per ADR-005 req 35 — read on `--resume` so a run that explicitly accepted ADRs without manual review continues consistently. CLI override wins: an explicit `--accept-adrs` / `--no-accept-adrs` on `--resume` supersedes the persisted value.)
+- Lean (may be overridden by CLI arg)
+- **Skills** (`Skills: true | false`; may be overridden by CLI `--skills` / `--no-skills` — CLI wins on `--resume`)
 - Branch (warn if current branch differs)
 - **Teammate-model** (may be overridden by CLI arg — persisted value read on `--resume` so a run that explicitly picked Opus teammates doesn't silently fall back to the default on resume)
 - Plan-phases (enumerate via `brains:phase-*` labels filtered by `brains:topic:<slug>`)
@@ -236,6 +249,42 @@ Wrap-up structure:
 ```
 
 Summarize the wrap-up to the user and close any remaining teammate panes.
+
+#### 7a. Transition draft PR to ready (per ADR-005 req 37a)
+
+AFTER the wrap-up document is written, IF ALL of the following conditions hold, transition the PR from draft to ready:
+
+1. The wrap-up has `Paused: false` (i.e., this is a clean completion, not a paused exit).
+2. No `brains:needs-human` tasks are outstanding for this topic — verify with: `bd list --label brains:topic:<slug> --label brains:needs-human --status=open` returns empty.
+3. `command -v gh` succeeds AND a PR exists for the current branch — verify with: `gh pr view --head $(git branch --show-current) --json number -q .number 2>/dev/null` returns a number.
+
+When all conditions hold:
+
+```bash
+SLUG="<slug>"
+CURRENT_BRANCH=$(git branch --show-current)
+
+# Condition 2
+NEEDS_HUMAN=$(bd list --label "brains:topic:$SLUG" --label brains:needs-human --status=open 2>/dev/null)
+
+# Condition 3
+PR_NUMBER=""
+if command -v gh >/dev/null 2>&1; then
+  PR_NUMBER=$(gh pr view --head "$CURRENT_BRANCH" --json number -q .number 2>/dev/null || true)
+fi
+
+if [[ -z "$NEEDS_HUMAN" ]] && [[ -n "$PR_NUMBER" ]]; then
+  READY_OUTPUT=$(gh pr ready "$PR_NUMBER" 2>&1) || true
+  if echo "$READY_OUTPUT" | grep -q 'already in "ready" state'; then
+    echo "PR #$PR_NUMBER already marked ready; skipping"
+  fi
+  # Surface the PR URL either way for the user
+  PR_URL=$(gh pr view "$PR_NUMBER" --json url -q .url 2>/dev/null || true)
+  [[ -n "$PR_URL" ]] && echo "PR ready for review: $PR_URL"
+fi
+```
+
+Skip silently when `gh` is missing, no GitHub remote exists, or no PR exists for the current branch. Failures (other than already-ready) MUST be logged but MUST NOT block wrap-up.
 
 ## Teammate-Side Protocol
 
