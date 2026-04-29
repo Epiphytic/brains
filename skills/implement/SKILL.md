@@ -2,7 +2,7 @@
 name: implement
 description: This skill should be used when the user asks to "implement the plan", "execute the plan", "start implementation", "build the tasks", "run the teammates", or invokes "/brains:implement". Phase 3 of the BRAINS pipeline: spawns a teammate Claude Code instance per plan-phase via agent-teams (preferred) or tmux (fallback), waits on beads state, handles task failures with two-strike-plus-human-in-loop flow. Supports --single, --parallel (default), and --debate modes for nurture/secure review within each plan-phase, plus an optional --autopilot flag that runs hands-off across phases until a needs-human ticket or direct user intervention stops it. Also supports --resume to pick up after a pause.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--teammate-model <sonnet|opus|haiku> | --teammate-opus | --teammate-sonnet | --teammate-haiku] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--skills|--no-skills] [--teammate-model <sonnet|opus|haiku> | --teammate-opus | --teammate-sonnet | --teammate-haiku] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -47,7 +47,17 @@ Autopilot state is persisted in the plan header (`Autopilot: true`) and read by 
 
 ### 1. Parse arguments
 
-Parse mode, `--autopilot`, `--lean`, `--teammate-model <sonnet|opus|haiku>` (and sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku`), `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+Parse mode, `--autopilot`, `--lean`, `--skills` / `--no-skills`, `--teammate-model <sonnet|opus|haiku>` (and sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku`), `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+
+**Flag resolution for `--skills`** (per ADR-005 reqs 18-19): 4-layer precedence — first definitive value wins:
+
+1. **Explicit CLI flag** — `--skills` / `--no-skills` on the command line wins, including on `--resume`.
+2. **Plan header** — on `--resume`, the persisted `Skills:` field in the plan header (see step 2) is consulted next.
+3. **`.claude/brains.local.md` Flags table** — `skills` row with `true` or `false`.
+4. **`~/.config/brains/defaults.json` `flags.skills`** — boolean.
+5. **Built-in default** — `false`.
+
+When the resolved value is `true`, this skill follows `$BRAINS_PATH/references/skills-detection.md` and `$BRAINS_PATH/references/skills-invocation.md`. The flag is propagated to spawned teammates as raw text in the initial prompt (mirroring `--lean`); each teammate re-probes hotskills locally per `references/skills-detection.md`.
 
 `--lean` activates the token-efficiency path: teammates receive only `skills/implement/teammate.md` (not the full master skill body); the compact multi-llm-protocol excerpt is inlined rather than read from the full reference; `failure-recovery.md` is lazy-loaded on first task failure; role-scoped context is loaded per `$BRAINS_PATH/manifests/master-implement.md`, `manifests/teammate.md`, `manifests/nurture.md`, and `manifests/secure.md`. Default off (byte-identical to prior behavior).
 
@@ -102,6 +112,8 @@ Read the plan document. Extract:
 - Slug
 - Mode (may be overridden by CLI arg)
 - Autopilot (may be overridden by CLI arg — presence of `--autopilot` flag sets true; absence on `--resume` keeps the persisted value)
+- Lean (may be overridden by CLI arg)
+- **Skills** (`Skills: true | false`; may be overridden by CLI `--skills` / `--no-skills` — CLI wins on `--resume`)
 - Branch (warn if current branch differs)
 - **Teammate-model** (may be overridden by CLI arg — persisted value read on `--resume` so a run that explicitly picked Opus teammates doesn't silently fall back to the default on resume)
 - Plan-phases (enumerate via `brains:phase-*` labels filtered by `brains:topic:<slug>`)

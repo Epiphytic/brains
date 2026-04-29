@@ -24,7 +24,11 @@ For `--parallel` and `--debate`, follow `$BRAINS_PATH/references/multi-llm-proto
 
 ### T1. Read inputs
 
-Read the ADR paths, plan path, phase label, mode, teammate-model, completion marker path, and any `model-hint` defaults from the initial prompt. ADRs MUST be read whole — they are never summarized.
+Read the ADR paths, plan path, phase label, mode, teammate-model, completion marker path, any `model-hint` defaults, and the skills flag (`--skills` / `--no-skills`) from the initial prompt. ADRs MUST be read whole — they are never summarized.
+
+#### T1.1 Skills probe (if `--skills` is set)
+
+If the initial prompt includes `--skills` (and not `--no-skills`), follow `$BRAINS_PATH/references/skills-detection.md` to probe hotskills locally in this teammate session, and `$BRAINS_PATH/references/skills-invocation.md` to derive a query and invoke (or fall back). Each teammate session probes independently — do NOT assume the master's resolved provider state. The vendored `$BRAINS_PATH/references/find-skills.md` is read only if the find-skills fallback fires.
 
 ### T2. Grooming (single subagent)
 
