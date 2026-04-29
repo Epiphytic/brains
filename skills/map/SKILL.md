@@ -2,7 +2,7 @@
 name: map
 description: This skill should be used when the user asks to "map out the plan", "create the implementation plan", "outline the tasks", "plan it out", "sketch the implementation", or invokes "/brains:map". Phase 2 of the BRAINS pipeline: high-level plan generation (no implementation specifics), topic-slug derivation, optional branch creation, beads task creation with brains:-prefixed labels, and user approval gate. Supports --single, --parallel (default), and --debate modes for plan review, plus an optional --autopilot flag that skips user gates and auto-chains into /brains:implement --autopilot. Chains into /brains:implement at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--rounds N] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--skills|--no-skills] [--rounds N] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -41,7 +41,18 @@ Autopilot is propagated downstream — the inherited state is persisted in the p
 
 ### 1. Parse arguments
 
-Parse mode, `--autopilot`, `--lean`, rounds, and topic. If no topic and no prior phase 1 output exists, ask the user. If chained from phase 1, inherit the mode, autopilot state, and `--lean` state.
+Parse mode, `--autopilot`, `--lean`, `--skills` / `--no-skills`, rounds, and topic. If no topic and no prior phase 1 output exists, ask the user. If chained from phase 1, inherit the mode, autopilot state, `--lean` state, and `--skills` state.
+
+`--grill` MUST be rejected with a clear error and a non-zero exit. Print: *"--grill is phase-1 only; use /brains:brains --grill instead"* and stop. `--grill` does not propagate from phase 1 either (per ADR-005 req 23).
+
+**Flag resolution for `--skills`** (per ADR-005 reqs 18-19): 4-layer precedence, top-to-bottom — first definitive value wins:
+
+1. **Explicit CLI flag** — `--skills` / `--no-skills` on the command line wins.
+2. **`.claude/brains.local.md` Flags table** — `skills` row with `true` or `false`.
+3. **`~/.config/brains/defaults.json` `flags.skills`** — boolean.
+4. **Built-in default** — `false`.
+
+When the resolved value is `true`, this skill follows `$BRAINS_PATH/references/skills-detection.md` and `$BRAINS_PATH/references/skills-invocation.md`. The vendored `$BRAINS_PATH/references/find-skills.md` is read only when the find-skills fallback fires.
 
 In autopilot, if a topic is truly missing and no prior phase 1 output exists, do NOT stall waiting for input — stop with a `brains:needs-human` style message to the user explaining that `/brains:map --autopilot` requires either a topic argument or a prior phase 1 output.
 

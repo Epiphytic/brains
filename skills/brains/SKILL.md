@@ -2,7 +2,7 @@
 name: brains
 description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes, and an optional --autopilot flag that auto-chains into hands-off map + implement. Chains into /brains:map at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--grill] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--grill] [--skills|--no-skills] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, WebFetch, WebSearch, TaskCreate, TaskUpdate
 ---
 
@@ -34,7 +34,18 @@ Do NOT chain into `/brains:map` until an ADR has been written and the user has a
 
 ### 1. Parse arguments and derive topic
 
-Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--lean`, `--grill`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
+Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--lean`, `--grill`, `--skills` / `--no-skills`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
+
+**Flag resolution for `--skills` and `--grill`** (per ADR-005 reqs 18-19): both are boolean orthogonal flags resolved through a 4-layer precedence chain. For each flag, walk the chain top-to-bottom and stop at the first definitive value:
+
+1. **Explicit CLI flag** — `--skills` / `--no-skills` (or `--grill` / `--no-grill`) on the command line wins.
+2. **`.claude/brains.local.md` Flags table** — a row matching the flag key with `true` or `false` in the "Project Default" column.
+3. **`~/.config/brains/defaults.json` `flags` object** — `flags.skills` / `flags.grill` boolean.
+4. **Built-in default** — `false`.
+
+Empty/missing rows in the local Flags table fall through to the global file; missing keys in the global `flags` object fall through to the built-in default. CLI `--no-skills` MUST override a `flags.skills: true` global; CLI `--no-grill` MUST override a `flags.grill: true` global.
+
+When the resolved value of `--skills` is `true`, this skill follows `$BRAINS_PATH/references/skills-detection.md` (probe procedure for hotskills) and `$BRAINS_PATH/references/skills-invocation.md` (query derivation, search/activate/invoke sequence, and the find-skills fallback). The vendored `$BRAINS_PATH/references/find-skills.md` is read only when the fallback fires (lazy-load per ADR-005 req 29).
 
 Diagram flag rules: `--no-diagram` suppresses all auto-trigger; `--diagram <type>` forces that type and overrides `--max-diagrams` (valid types: `flowchart`, `state`, `c4`, `er`, `sequence`; error with list of valid types if unknown); `--max-diagrams N` must be 1–5 (error if out of range, default 1). These flags are stored and passed to step 8.
 
