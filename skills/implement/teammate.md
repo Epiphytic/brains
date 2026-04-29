@@ -35,9 +35,32 @@ If the initial prompt includes `--skills` (and not `--no-skills`), follow `$BRAI
 Query the task tracker for tasks matching `brains:topic:<slug>` + `brains:phase-<N>` + `brains:ready-for-grooming` (see `$BRAINS_PATH/references/beads-integration.md` § Task Queries).
 
 Spawn a single grooming subagent. Prompt:
-> "Groom these tasks for phase <N>: <task list>. For each task, research the codebase and external docs as needed. Flesh out the description, acceptance criteria, and implementation notes. For each task, emit a `model-hint` field (`sonnet-fine` or `prefer-opus`) in the beads issue record based on complexity: `prefer-opus` when the task introduces new architectural boundaries, touches cross-cutting concerns, or requires non-local reasoning; `sonnet-fine` otherwise. If grooming surfaces new tasks in the same phase scope, add them to beads with labels `brains:topic:<slug>` + `brains:phase-<N>` + `brains:ready-for-grooming`. On completion, swap `brains:ready-for-grooming` for `brains:groomed` on each task."
+> "Groom these tasks for phase <N>: <task list>. For each task, research the codebase and external docs as needed. Flesh out the description, acceptance criteria, and implementation notes. For each task, emit a `model-hint` field (`sonnet-fine` or `prefer-opus`) in the beads issue record based on complexity: `prefer-opus` when the task introduces new architectural boundaries, touches cross-cutting concerns, or requires non-local reasoning; `sonnet-fine` otherwise. If grooming surfaces new tasks in the same phase scope, add them to beads with labels `brains:topic:<slug>` + `brains:phase-<N>` + `brains:ready-for-grooming`. On completion, swap `brains:ready-for-grooming` for `brains:groomed` on each task.
+>
+> **Final post-grooming step (per ADR-005 reqs 39-43): GitHub Actions CI status check.** AFTER all label swaps complete, run this check IF (a) `git remote get-url origin` matches `github.com` (substring) AND (b) `command -v gh` succeeds. Both conditions failing → log `CI check skipped: <gh missing | no GitHub remote>` and return.
+>
+> ```bash
+> CURRENT_BRANCH=$(git branch --show-current)
+> RUNS=$(gh run list --limit 10 --branch \"$CURRENT_BRANCH\" --json status,conclusion,name,databaseId,createdAt 2>/dev/null)
+> ```
+>
+> For each run with `conclusion in [failure, timed_out, action_required, cancelled]`:
+> 1. Determine if the same workflow was already failing on the immediate parent commit: `gh run list --limit 5 --branch \"$CURRENT_BRANCH\" --workflow \"<name>\" --commit $(git rev-parse HEAD~1) --json conclusion,databaseId 2>/dev/null` — if any returned run has `conclusion in [failure, timed_out, action_required, cancelled]`, the failure is **pre-existing** (skip).
+> 2. Otherwise (NEW failure), file a beads task:
+>    ```
+>    bd create \\
+>      --title \"Investigate CI failure: <workflow name>\" \\
+>      --type=bug \\
+>      --priority=2
+>    ```
+>    Then label it (one `bd label add` call per label):
+>    `bd label add <id> brains:topic:<slug>`,
+>    `bd label add <id> brains:phase-<N+1>` IF a next phase exists, ELSE `bd label add <id> brains:cleanup`,
+>    `bd label add <id> ci-failure`.
+>
+> MUST NOT wait for in-flight runs to finish (the check is read-only and reports current state). MUST NOT block grooming completion — even if the entire CI block errors, return success."
 
-On grooming failure (3-strike): write `status=failed` to completion marker; halt.
+On grooming failure (3-strike): write `status=failed` to completion marker; halt. CI-check failures (network, gh permission errors) MUST NOT count toward grooming-failure strikes.
 
 ### T3. Execution (subagent preferred, not required)
 
@@ -63,6 +86,8 @@ Nurture is responsible for:
 - Reflecting half-complete state in docs if the phase ended early
 - Standard behaviors: bug review, test coverage checks, spec drift detection
 - Filing follow-up beads tasks labelled `brains:phase-<N+1>` or `brains:cleanup`
+
+**Proactive doc updates during execution (per ADR-005 reqs 27-28):** When implementing tasks that change user-facing behavior or add new options, the teammate MUST update `README.md` and `CHANGELOG.md` entries in the SAME commit as the code change. Docs land with the code, not as trailing cleanup. If no `CHANGELOG.md` exists at the repo root, file a `bd create` follow-up task rather than creating one unilaterally — the project may have a different release-notes convention.
 
 Close the `Nurture: phase <N>` umbrella task on completion.
 
