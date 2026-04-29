@@ -2,7 +2,7 @@
 
 **Slug:** brains-skills-integration
 **ADRs:** docs/adr/2026-04-28-005-brains-skills-integration.md
-**Research:** docs/plans/2026-04-28-brains-skills-integration-research.md
+**Research:** docs/research/2026-04-28-brains-skills-integration-research.md
 **Mode:** --parallel
 **Autopilot:** true
 **Lean:** false
@@ -39,8 +39,12 @@ Implement ADR-005 in three plan-phases:
   - Depends on: T-1.1
   - Acceptance: `AGENTS.md` contains a section titled "Vendored documentation maintenance" referencing `references/find-skills.md`, the upstream URL, and a refresh policy ("refresh on every minor BRAINS release; nurture may file a refresh ticket if older than 90 days").
 
+- [ ] **T-1.8**: Migrate research-path convention to `docs/research/`
+  - Depends on: none
+  - Acceptance: `skills/brains/SKILL.md` step 2 writes new research files to `docs/research/YYYY-MM-DD-<slug>-research.md` (and the lean research-summary stash to `docs/research/YYYY-MM-DD-<slug>-research-summary.yaml`). `skills/map/SKILL.md` step 4 reads research from `docs/research/` first, falling back to `docs/plans/` for legacy files. Existing `docs/plans/*-research.md` files are NOT auto-migrated; new runs use the new path. The phase-1 reuse staleness check (`docs/plans/2026-04-28-brains-skills-integration-research.md` mtime check) is updated to scan `docs/research/`. Verifiable: `grep -n 'docs/plans/.*-research' skills/brains/SKILL.md skills/map/SKILL.md` returns no matches outside legacy-fallback prose.
+
 - [ ] **T-1.6** (Nurture): `Nurture: phase 1`
-  - Depends on: T-1.1, T-1.2, T-1.3, T-1.4, T-1.5
+  - Depends on: T-1.1, T-1.2, T-1.3, T-1.4, T-1.5, T-1.8
   - Acceptance: `docs/plans/2026-04-28-brains-skills-integration-phase-1-nurture.md` exists with an `Issues Fixed` section. README/CHANGELOG/AGENTS.md mentions of the new vendored doc and config schema are accurate. Tests for migration-merge invariants exist or have been filed as cleanup tickets.
 
 - [ ] **T-1.7** (Secure): `Secure: phase 1`
@@ -77,8 +81,20 @@ Implement ADR-005 in three plan-phases:
   - Depends on: T-2.3
   - Acceptance: The Teammate Initial Prompt Template explicitly documents `--skills` as a forwarded flag (mirroring `--lean`); `--grill` non-propagation reaffirmed.
 
+- [ ] **T-2.10**: Add `--accept-adrs` flag to `/brains:brains` and propagate via plan header
+  - Depends on: T-2.1
+  - Acceptance: `skills/brains/SKILL.md` step 1 parses `--accept-adrs`. Step 9 logic: when `--autopilot` is set WITHOUT `--accept-adrs`, present the ADR gate normally and await user input; when `--autopilot --accept-adrs` are both set, auto-select option 2. The argument-hint frontmatter line includes `[--accept-adrs]`. `skills/map/SKILL.md` step 11 plan-header schema adds `Accept-ADRs: <true|false>` field; `skills/implement/SKILL.md` reads it on `--resume` consistently with `Autopilot:`. README "Additional flags" subsection documents `--accept-adrs` (covered by T-3.5 extension).
+
+- [ ] **T-2.11**: Hoist branch-creation logic from `/brains:map` step 3 into `/brains:brains` step 9
+  - Depends on: T-2.10
+  - Acceptance: `skills/brains/SKILL.md` step 9 (BEFORE the commit+push subprocess) checks if the user is on a base branch (`main`/`master`/`develop` or any branch in `settings.local.json` `brains.baseBranches`); if so, in interactive mode prompts to create `brains/<slug>` and switch, in `--autopilot` mode auto-creates and switches without prompting. The branch-creation block in `skills/map/SKILL.md` step 3 becomes a no-op fallback that fires only when the current branch is still a base branch (covering standalone `/brains:map` invocation). After the ADR commit+push, `skills/brains/SKILL.md` step 9 prints the GitHub PR-creation URL (`gh pr create --draft` invocation hint) when a GitHub remote is detected; this is OPTIONAL and skipped silently when `gh` is missing or no GitHub remote exists.
+
+- [ ] **T-2.12**: Add CI status check to grooming (T2) in `skills/implement/teammate.md`
+  - Depends on: T-2.6 (teammate.md already touched in phase 2)
+  - Acceptance: `skills/implement/teammate.md` T2 grooming subagent prompt is extended to include a final post-grooming step: AFTER swapping `brains:ready-for-grooming` for `brains:groomed`, IF `git remote get-url origin` matches `github.com` AND `command -v gh` succeeds, run `gh run list --limit 10 --branch $(git branch --show-current) --json status,conclusion,name,databaseId,createdAt`. For each failed run (`conclusion in [failure, timed_out, action_required, cancelled]`), check whether the same workflow was failing on `git rev-parse HEAD~1`; if NOT pre-existing, file `bd create --title "Investigate CI failure: <workflow>" --type=bug --priority=2 --label brains:topic:<slug> --label brains:phase-<N+1> --label ci-failure` (or `brains:cleanup` if N is the final phase). MUST NOT wait for in-flight runs. MUST NOT block grooming. Skipped silently when `gh` missing or no GitHub remote.
+
 - [ ] **T-2.8** (Nurture): `Nurture: phase 2`
-  - Depends on: T-2.1, T-2.2, T-2.3, T-2.4, T-2.5, T-2.6, T-2.7
+  - Depends on: T-2.1, T-2.2, T-2.3, T-2.4, T-2.5, T-2.6, T-2.7, T-2.10, T-2.11, T-2.12
   - Acceptance: `docs/plans/2026-04-28-brains-skills-integration-phase-2-nurture.md` exists with `Issues Fixed` section. All argument-hint frontmatter lines updated; README flag list updated for skills plumbing; CHANGELOG entry added.
 
 - [ ] **T-2.9** (Secure): `Secure: phase 2`
@@ -103,9 +119,9 @@ Implement ADR-005 in three plan-phases:
   - Depends on: T-2.6 (teammate file already touched in phase 2)
   - Acceptance: `skills/implement/teammate.md` T4 contains a bullet: "When implementing tasks that change user-facing behavior or add new options, update README and CHANGELOG entries in the SAME commit as the code change. Docs land with the code, not as trailing cleanup. If no `CHANGELOG.md` exists at the repo root, file a `bd create` follow-up task rather than creating one unilaterally."
 
-- [ ] **T-3.5**: Add `--skills` flag prose to `README.md`
-  - Depends on: T-2.1
-  - Acceptance: `README.md` "Additional flags" subsection documents `--skills` with composition notes (orthogonal to mode flags; per-session probing; safe under `--autopilot`). Examples block adds 2-3 entries showing `--skills` use.
+- [ ] **T-3.5**: Add `--skills` and `--accept-adrs` flag prose to `README.md`
+  - Depends on: T-2.1, T-2.10, T-2.11
+  - Acceptance: `README.md` "Additional flags" subsection documents `--skills` (orthogonal to mode flags; per-session probing; safe under `--autopilot`) AND `--accept-adrs` (default OFF; `--autopilot` no longer auto-accepts ADRs without it). Examples block adds 2-3 entries showing `--skills` use AND 1-2 entries showing `--autopilot --accept-adrs` for full hands-off. Branch-creation behavior in phase 1 (when on a base branch) is documented under the "Workflow" or "Modes" section.
 
 - [ ] **T-3.6**: Add `Configuration` section to `README.md`
   - Depends on: T-1.2, T-1.3, T-1.4
@@ -113,7 +129,7 @@ Implement ADR-005 in three plan-phases:
 
 - [ ] **T-3.7**: Create / update `CHANGELOG.md`
   - Depends on: T-3.5, T-3.6
-  - Acceptance: `CHANGELOG.md` exists at repo root with a v0.5.0 entry describing the `--skills` flag, config-default support, and nurture doc-update strengthening. Entry follows Keep-a-Changelog conventions.
+  - Acceptance: `CHANGELOG.md` exists at repo root with a v0.5.0 entry describing: `--skills` flag, `--accept-adrs` flag (and the autopilot ADR-gate behavior change), config-default support, nurture doc-update strengthening, research-path migration to `docs/research/`, branch-creation hoisting into phase 1, and CI-status check in grooming. Entry follows Keep-a-Changelog conventions. Breaking-change subsection notes the `--autopilot` semantic change (no longer auto-accepts ADRs without `--accept-adrs`).
 
 - [ ] **T-3.8**: Add E2E coverage for detection-and-fallback paths
   - Depends on: T-2.4, T-2.5
