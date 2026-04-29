@@ -210,6 +210,7 @@ Update the map document to include the following frontmatter/header fields:
 **Accept-ADRs:** <true | false>
 **Lean:** <true | false>
 **Bullets:** <true | false>
+**Skills:** <true | false>
 **Teammate-model:** <sonnet | opus | haiku | (unset — /brains:implement will resolve and write back)>
 **Branch:** <branch name>
 
@@ -233,7 +234,7 @@ research-summary:
 -->
 ```
 
-The `Mode:`, `Autopilot:`, `Accept-ADRs:`, `Lean:`, `Bullets:`, and `Teammate-model:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, `--lean`, `--teammate-model opus`, or the sugar aliases `--teammate-opus` / `--teammate-sonnet` / `--teammate-haiku`). On first phase-2 run, `Teammate-model:` MAY be left empty if the user has not chosen a tier; `/brains:implement` resolves the default per step 1b and writes the decision back to the plan header before launching the first teammate.
+The `Mode:`, `Autopilot:`, `Accept-ADRs:`, `Lean:`, `Bullets:`, `Skills:`, and `Teammate-model:` lines are read by `/brains:implement --resume`. CLI flags on `--resume` override the persisted values (e.g., `/brains:implement --resume --single`, `--autopilot`, `--lean`, `--teammate-model opus`, or the sugar aliases `--teammate-opus` / `--teammate-sonnet` / `--teammate-haiku`). On first phase-2 run, `Teammate-model:` MAY be left empty if the user has not chosen a tier; `/brains:implement` resolves the default per step 1b and writes the decision back to the plan header before launching the first teammate.
 
 ## Phase Transition
 

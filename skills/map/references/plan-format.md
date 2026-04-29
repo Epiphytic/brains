@@ -11,7 +11,12 @@ The canonical plan document structure produced by `/brains:map`. The plan docume
 **ADRs:** <list of paths, comma-separated>
 **Research:** <research doc path>
 **Mode:** <--single | --parallel | --debate>   <!-- persisted for --resume -->
-**Bullets:** <true | false>   <!-- persisted for --resume; serial-sweep mode -->
+**Autopilot:** <true | false>   <!-- persisted for --resume -->
+**Accept-ADRs:** <true | false> <!-- persisted for --resume; ADR-005 req 35 -->
+**Lean:** <true | false>        <!-- persisted for --resume -->
+**Bullets:** <true | false>     <!-- persisted for --resume; serial-sweep mode -->
+**Skills:** <true | false>      <!-- persisted for --resume; ADR-005 req 21-22 -->
+**Teammate-model:** <sonnet | opus | haiku> <!-- resolved by /brains:implement on first run -->
 **Branch:** <branch name>
 
 ## Overview
@@ -37,7 +42,12 @@ The canonical plan document structure produced by `/brains:map`. The plan docume
 | ADRs | Immutable source of architectural truth | All phases |
 | Research | Snapshot of codebase/ecosystem understanding | /brains:map (for re-exploration decision), teammates (grooming input) |
 | Mode | Default mode for /brains:implement --resume | /brains:implement |
+| Autopilot | Persisted autopilot state for --resume (CLI override wins) | /brains:implement |
+| Accept-ADRs | Persisted ADR auto-accept state for --resume (CLI override wins) | /brains:implement |
+| Lean | Persisted lean-mode state for --resume (CLI override wins) | /brains:implement |
 | Bullets | Whether the plan was emitted in serial-sweep shape (inline execution, no teammate spawn) | /brains:map (gate behavior), /brains:implement --resume |
+| Skills | Persisted --skills state for --resume (CLI override wins) | /brains:implement, teammate (forwarded as raw text in initial prompt) |
+| Teammate-model | Per-phase teammate Claude Code model tier (resolved on first run; persisted for --resume) | /brains:implement |
 | Branch | Branch the tasks were created on | /brains:implement (sanity check) |
 
 ## Task ID Format
