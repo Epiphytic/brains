@@ -2,7 +2,7 @@
 name: brains
 description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes, and an optional --autopilot flag that auto-chains into hands-off map + implement. Chains into /brains:map at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--grill] [--skills|--no-skills] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--accept-adrs] [--lean] [--grill] [--skills|--no-skills] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, WebFetch, WebSearch, TaskCreate, TaskUpdate
 ---
 
@@ -34,22 +34,24 @@ Do NOT chain into `/brains:map` until an ADR has been written and the user has a
 
 ### 1. Parse arguments and derive topic
 
-Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--lean`, `--grill`, `--skills` / `--no-skills`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
+Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--accept-adrs` / `--no-accept-adrs`, `--lean`, `--grill`, `--skills` / `--no-skills`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
 
-**Flag resolution for `--skills` and `--grill`** (per ADR-005 reqs 18-19): both are boolean orthogonal flags resolved through a 4-layer precedence chain. For each flag, walk the chain top-to-bottom and stop at the first definitive value:
+**Flag resolution for `--skills`, `--grill`, and `--accept-adrs`** (per ADR-005 reqs 18-19, 34-35): all three are boolean orthogonal flags resolved through a 4-layer precedence chain. For each flag, walk the chain top-to-bottom and stop at the first definitive value:
 
-1. **Explicit CLI flag** — `--skills` / `--no-skills` (or `--grill` / `--no-grill`) on the command line wins.
+1. **Explicit CLI flag** — `--skills` / `--no-skills` (or `--grill` / `--no-grill`, or `--accept-adrs` / `--no-accept-adrs`) on the command line wins.
 2. **`.claude/brains.local.md` Flags table** — a row matching the flag key with `true` or `false` in the "Project Default" column.
-3. **`~/.config/brains/defaults.json` `flags` object** — `flags.skills` / `flags.grill` boolean.
+3. **`~/.config/brains/defaults.json` `flags` object** — `flags.skills` / `flags.grill` / `flags.accept-adrs` boolean.
 4. **Built-in default** — `false`.
 
-Empty/missing rows in the local Flags table fall through to the global file; missing keys in the global `flags` object fall through to the built-in default. CLI `--no-skills` MUST override a `flags.skills: true` global; CLI `--no-grill` MUST override a `flags.grill: true` global.
+Empty/missing rows in the local Flags table fall through to the global file; missing keys in the global `flags` object fall through to the built-in default. CLI `--no-skills` MUST override a `flags.skills: true` global; CLI `--no-grill` MUST override a `flags.grill: true` global; CLI `--no-accept-adrs` MUST override a `flags.accept-adrs: true` global.
 
 When the resolved value of `--skills` is `true`, this skill follows `$BRAINS_PATH/references/skills-detection.md` (probe procedure for hotskills) and `$BRAINS_PATH/references/skills-invocation.md` (query derivation, search/activate/invoke sequence, and the find-skills fallback). The vendored `$BRAINS_PATH/references/find-skills.md` is read only when the fallback fires (lazy-load per ADR-005 req 29).
 
 Diagram flag rules: `--no-diagram` suppresses all auto-trigger; `--diagram <type>` forces that type and overrides `--max-diagrams` (valid types: `flowchart`, `state`, `c4`, `er`, `sequence`; error with list of valid types if unknown); `--max-diagrams N` must be 1–5 (error if out of range, default 1). These flags are stored and passed to step 8.
 
-`--autopilot` is an orthogonal flag that composes with any mode. When present, it does not change question-generation, synthesis, or review behavior — those still follow the selected mode. It only pre-selects **option 2** at the ADR gate (see step 9) and propagates to downstream phases.
+`--autopilot` is an orthogonal flag that composes with any mode. When present, it does not change question-generation, synthesis, or review behavior — those still follow the selected mode. It propagates to downstream phases. By itself, `--autopilot` does NOT auto-accept the ADR gate (per ADR-005 req 33) — the gate is presented normally and awaits user input. To skip the ADR gate as well, combine with `--accept-adrs`.
+
+`--accept-adrs` is an orthogonal flag (per ADR-005 reqs 34-35). When `--autopilot --accept-adrs` are BOTH resolved-true at step 9, the skill auto-selects **option 2** at the ADR gate and chains into `/brains:map --autopilot`. With `--autopilot` alone (no `--accept-adrs`), the gate is presented normally — autopilot semantics resume only AFTER the user accepts. The resolved value is persisted in the plan header (`Accept-ADRs:`) so `/brains:implement --resume` honors it consistently with `Autopilot:`.
 
 `--lean` is an orthogonal flag that composes with any mode and with `--autopilot`. When present, activate the token-efficiency path (see `$BRAINS_PATH/manifests/phase-1-brains.md` for the role manifest): use the compact multi-llm-protocol excerpt inline rather than reading the full reference; append a `Research-Summary` block to the plan header at step 2; otherwise behave identically. Default off (byte-identical to prior behavior). `--lean` propagates to downstream phases.
 
@@ -159,9 +161,15 @@ Each dispatched diagram: invoke `/brains:diagram` as a sub-skill with `--type <t
 
 The companion view MUST remain visible while the user evaluates options. Do NOT push a waiting screen until AFTER the user responds to the gate.
 
-Present the ADR(s) to the user. If `--autopilot` was passed at skill launch, do NOT prompt — auto-select option 2 and proceed. Otherwise prompt the user to choose exactly one of:
+Present the ADR(s) to the user. Gate behavior depends on the resolved values of `--autopilot` and `--accept-adrs` (per ADR-005 reqs 33-34):
 
-> **`--grill --autopilot` handoff:** when both flags are present, the grill questionnaire (steps 3–5) runs to full convergence in phase 1 — interactive questioning is not skipped. After the phase-1 gate, autopilot semantics take over: option 2 is auto-selected and the skill chains into `/brains:map --autopilot`. The intent is "interview me thoroughly, then go hands-off." To opt out of the downstream autopilot while keeping grilling, use `--grill` without `--autopilot`.
+- **`--autopilot` AND `--accept-adrs` both true:** do NOT prompt — auto-select option 2 and proceed.
+- **`--autopilot` true, `--accept-adrs` false (default):** present the ADR gate normally and await user input. Autopilot semantics resume only AFTER the user accepts (option 1, 2, or 6). This preserves human-in-the-loop on architectural commitments.
+- **Neither flag (interactive default):** present the gate normally.
+
+When prompting, ask the user to choose exactly one of:
+
+> **`--grill --autopilot --accept-adrs` handoff:** when all three flags are present, the grill questionnaire (steps 3–5) runs to full convergence in phase 1 — interactive questioning is not skipped. After the phase-1 gate, autopilot semantics take over: option 2 is auto-selected and the skill chains into `/brains:map --autopilot`. The intent is "interview me thoroughly, then go hands-off." Without `--accept-adrs`, the ADR gate is still presented after grilling. To opt out of the downstream autopilot while keeping grilling, use `--grill` without `--autopilot`.
 
 1. **Accept ADR(s), push to origin, and chain into `/brains:map`** (planning mode) with the inherited mode flag.
 2. **Accept ADR(s), push to origin, and chain into `/brains:map --autopilot`** (hands-off planning + implementation) with the inherited mode flag.
@@ -170,9 +178,27 @@ Present the ADR(s) to the user. If `--autopilot` was passed at skill launch, do 
 5. **Provide fixes or alternate instructions.** User writes concrete edits or new guidance. Treat the text as input to a re-run of step 6 (architecture synthesis) and step 7 (architecture review) with the current ADR draft + user guidance appended to context. Re-present at this gate when the revised ADR is ready.
 6. **(Conditional) Accept ADR(s), push to origin, and skip to inline implementation** — available ONLY when the synthesized architecture flags all three: no new external dependencies, no new external services, single-component change. Offer this option only when all three flags are met. When accepted, the CURRENT session proceeds to implement the ADR inline without invoking `/brains:map` or `/brains:implement`. Use beads + TDD to track and execute tasks directly; spawn nurture + secure subagents at the end. Autopilot NEVER auto-selects this option.
 
-#### Handling options 1-3: commit and push
+#### Handling options 1-3: branch, commit, push, draft PR, link surfacing
 
-Before chaining (options 1/2) or stopping (option 3), commit the newly produced ADR files (and the research document from step 2 if not already committed) and push to origin. Use conventional-commit prefix `docs(adr):`.
+Before chaining (options 1/2) or stopping (option 3), perform the following sub-steps in order. Each sub-step is a separate concern; do not collapse them.
+
+##### (a) Topic-branch offer (per ADR-005 req 36)
+
+ADR commits MUST land on a topic branch, not on a base branch. Hoisted from `/brains:map` step 3 so the ADR review PR has a clean home.
+
+```bash
+CURRENT_BRANCH=$(git branch --show-current)
+# Base branches: main, master, develop (or settings.local.json key brains.baseBranches)
+```
+
+- **If `CURRENT_BRANCH` is a base branch (`main`/`master`/`develop`):**
+  - **Interactive:** prompt *"Create topic branch `brains/<slug>` and switch to it before committing the ADR? [Y/n]"*. On yes/default: `git checkout -b brains/<slug>` and emit a one-line status (`"Switched to new branch brains/<slug>"`). On no: continue on the current branch with a one-line warning that the ADR commit will land on `<base>`.
+  - **`--autopilot`:** auto-create without prompting — `git checkout -b brains/<slug>` — and emit a one-line status update.
+- **Otherwise** (already on a non-base branch): use the current branch silently — no prompt, no status line.
+
+##### (b) Commit and push the ADR
+
+Commit the newly produced ADR files (and the research document from step 2 if not already committed) and push to origin. Use conventional-commit prefix `docs(adr):`.
 
 ```bash
 # Stage and commit (files listed explicitly — never `git add .`)
@@ -189,6 +215,54 @@ fi
 ```
 
 If the push fails (auth, protected branch, network), surface the error to the user. Do NOT bypass hooks or force-push. Offer: (a) retry after the user resolves the issue, (b) skip push and continue locally (options 1/2 still chain; option 3 still stops), (c) abort.
+
+##### (c) Auto-create draft PR (per ADR-005 req 37)
+
+After a successful push, IF `command -v gh` succeeds AND `git remote get-url origin` contains the substring `github.com`, auto-create a draft PR per ADR. Build `<ADR title>` from the ADR file's first H1 line (e.g., `ADR-NNN: <Title>`).
+
+```bash
+if command -v gh >/dev/null 2>&1 && git remote get-url origin 2>/dev/null | grep -q github.com; then
+  for ADR in <list of newly created ADR paths>; do
+    ADR_TITLE=$(sed -n 's/^# *//p' "$ADR" | head -n1)
+    PR_OUTPUT=$(gh pr create --draft --title "$ADR_TITLE" --body-file "$ADR" 2>&1) || true
+    if echo "$PR_OUTPUT" | grep -q 'already exists'; then
+      echo "Draft PR already exists for branch; skipping creation"
+    else
+      # Capture the URL from the last line of stdout (gh prints it on success)
+      PR_URL=$(echo "$PR_OUTPUT" | tail -n1)
+    fi
+  done
+fi
+```
+
+Skip silently when `gh` is missing or the origin is not a GitHub remote. Capture `PR_URL` for sub-step (d).
+
+##### (d) Surface ADR + PR links (per ADR-005 req 37b)
+
+BEFORE the gate options menu (the actual prompt the user types `1`/`2`/etc into) but AFTER commit+push and the optional draft-PR creation, surface clickable GitHub links. URL format:
+
+```
+https://<host>/<owner>/<repo>/blob/<branch>/<adr-path>
+```
+
+Derive `<host>/<owner>/<repo>` from `git remote get-url origin` — handle BOTH forms:
+- `https://github.com/<owner>/<repo>(.git)?` → host=`github.com`, owner+repo as-is
+- `git@github.com:<owner>/<repo>(.git)?` → host=`github.com`, owner+repo from after the colon
+
+Strip a trailing `.git` if present. Use `<branch>` from `git branch --show-current` (the topic branch from sub-step (a)).
+
+Format as a labeled list:
+
+```
+Review ADRs:
+- https://github.com/<owner>/<repo>/blob/brains/<slug>/docs/adr/YYYY-MM-DD-NNN-<slug>.md
+[- https://github.com/<owner>/<repo>/blob/brains/<slug>/docs/adr/YYYY-MM-DD-NNN-<slug-2>.md ...]
+
+Draft PR:
+- <PR_URL captured in sub-step (c)>
+```
+
+Omit the `Draft PR:` block when no PR was created (no `gh`, no GitHub remote, or `already exists` was logged). Skip the entire links block silently when no GitHub remote exists.
 
 #### Handling option 4: terminal rejection
 
