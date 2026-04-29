@@ -74,6 +74,11 @@ Evaluate the implementation against these criteria:
 - Are interfaces respected?
 - Are there breaking changes to existing functionality?
 
+**Documentation (per ADR-005 reqs 24-26):**
+- Are user-facing docs (README, CHANGELOG, ADRs) updated to reflect the changes in this scope?
+- Are new flags, options, or commands documented in README's flag reference?
+- Does CHANGELOG.md have an entry for any user-visible behavior change?
+
 ### 3. Council Review (if multi-LLM mode)
 
 **Parallel mode:** After local review, send findings plus the code to the council:
@@ -105,6 +110,7 @@ Consolidate all findings into a prioritized list:
 | P0 | Bug | [description] | [files] | [approach] |
 | P1 | Missing feature | [description] | [files] | [approach] |
 | P1 | Missing test | [description] | [files] | [approach] |
+| P1 | Missing docs | [description] | [files] | [approach] |
 | P2 | Code quality | [description] | [files] | [approach] |
 
 Present the list to the user. Get approval before fixing.
@@ -129,7 +135,7 @@ When invoked with `--scope phase-N`, nurture MUST also:
 Work through the issue list in priority order:
 
 - **P0 (Bugs):** Fix immediately. Run tests after each fix.
-- **P1 (Missing features/tests):** Implement according to the design spec. Write E2E tests for missing coverage.
+- **P1 (Missing features/tests/docs):** Implement features per the design spec, write E2E tests for missing coverage, AND update `README.md` / `CHANGELOG.md` for any user-visible behavior change in scope. If no `CHANGELOG.md` exists, file a follow-up beads task rather than creating one unilaterally (the project may use a different release-notes convention).
 - **P2 (Code quality):** Fix only what materially affects readability or maintainability.
 
 For each fix:
