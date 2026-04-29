@@ -49,6 +49,7 @@ When master spawns a teammate, the initial prompt MUST include:
 - Phase label (e.g., brains:phase-2)
 - Mode flag inherited from master (--single | --parallel | --debate)
 - Path to the teammate's completion marker file (docs/plans/.state/<slug>-phase-N-marker.json)
+- Skills flag (`--skills` / `--no-skills`) — propagated as raw text in the initial prompt, mirroring `--lean`. Teammate re-probes hotskills locally per `references/skills-detection.md`; master MUST NOT pass a resolved provider value.
 - Behavioral constraints: "Only modify beads tasks labelled brains:topic:<slug> AND brains:phase-N. Cross-phase findings MUST be created with the target phase's label or brains:cleanup. Do not touch the agent-teams native task list if beads is available."
 
 ## Completion Marker Format

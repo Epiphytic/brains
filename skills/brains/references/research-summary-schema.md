@@ -31,7 +31,7 @@ A downstream consumer MUST drill down into the full research document when:
 - A task is flagged `risk:high` during grooming and any summary field is ambiguous.
 - `--ignore-research-summary` is passed (opt-out for the run).
 
-Drill-down means reading `docs/plans/YYYY-MM-DD-<slug>-research.md` in full.
+Drill-down means reading `docs/research/YYYY-MM-DD-<slug>-research.md` in full (legacy fallback: `docs/plans/YYYY-MM-DD-<slug>-research.md` for pre-v0.5 ADRs).
 
 ## Writer responsibility
 
