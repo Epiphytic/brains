@@ -2,7 +2,7 @@
 name: implement
 description: This skill should be used when the user asks to "implement the plan", "execute the plan", "start implementation", "build the tasks", "run the teammates", or invokes "/brains:implement". Phase 3 of the BRAINS pipeline: spawns a teammate Claude Code instance per plan-phase via agent-teams (preferred) or tmux (fallback), waits on beads state, handles task failures with two-strike-plus-human-in-loop flow. Supports --single, --parallel (default), and --debate modes for nurture/secure review within each plan-phase, plus an optional --autopilot flag that runs hands-off across phases until a needs-human ticket or direct user intervention stops it. Also supports --resume to pick up after a pause.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--skills|--no-skills] [--teammate-model <sonnet|opus|haiku> | --teammate-opus | --teammate-sonnet | --teammate-haiku] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--accept-adrs|--no-accept-adrs] [--lean] [--skills|--no-skills] [--teammate-model <sonnet|opus|haiku> | --teammate-opus | --teammate-sonnet | --teammate-haiku] [--no-escalate-on-retry] [--ignore-model-hints] [--resume] [--slug <slug>]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -47,9 +47,9 @@ Autopilot state is persisted in the plan header (`Autopilot: true`) and read by 
 
 ### 1. Parse arguments
 
-Parse mode, `--autopilot`, `--lean`, `--skills` / `--no-skills`, `--teammate-model <sonnet|opus|haiku>` (and sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku`), `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
+Parse mode, `--autopilot`, `--accept-adrs` / `--no-accept-adrs`, `--lean`, `--skills` / `--no-skills`, `--teammate-model <sonnet|opus|haiku>` (and sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku`), `--no-escalate-on-retry`, `--ignore-model-hints`, `--resume`, and optional `--slug <slug>`. If `--resume` without `--slug`, find the most recent `docs/plans/*-map.md` with open tasks.
 
-**Flag resolution for `--skills`** (per ADR-005 reqs 18-19): 4-layer precedence — first definitive value wins:
+**Flag resolution for `--skills`** (per ADR-005 reqs 18-19): 5-layer precedence (the standard 4 layers plus a `--resume` plan-header lookup) — first definitive value wins:
 
 1. **Explicit CLI flag** — `--skills` / `--no-skills` on the command line wins, including on `--resume`.
 2. **Plan header** — on `--resume`, the persisted `Skills:` field in the plan header (see step 2) is consulted next.

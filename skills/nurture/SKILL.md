@@ -40,7 +40,7 @@ The `--scope` flag controls what nurture reviews:
 
 Identify what to review:
 
-- **BRAINS outputs**: Check `docs/plans/` for research docs, ADRs (`docs/adr/`), and map/implement specs
+- **BRAINS outputs**: Check `docs/research/` for research docs (legacy fallback: `docs/plans/`), `docs/adr/` for ADRs, and `docs/plans/` for map/implement specs
 - **Recent changes**: `git log --oneline -20` and `git diff main...HEAD --stat` to scope what was built
 - **User scope**: If the user specified a scope, focus on those files/modules
 - **Test coverage**: Check for existing test files, coverage reports

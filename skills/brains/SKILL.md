@@ -40,10 +40,10 @@ Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--accept-adrs` / `
 
 1. **Explicit CLI flag** — `--skills` / `--no-skills` (or `--grill` / `--no-grill`, or `--accept-adrs` / `--no-accept-adrs`) on the command line wins.
 2. **`.claude/brains.local.md` Flags table** — a row matching the flag key with `true` or `false` in the "Project Default" column.
-3. **`~/.config/brains/defaults.json` `flags` object** — `flags.skills` / `flags.grill` / `flags.accept-adrs` boolean.
+3. **`~/.config/brains/defaults.json` `flags` object** — `flags.skills` / `flags.grill` / `flags.accept_adrs` boolean.
 4. **Built-in default** — `false`.
 
-Empty/missing rows in the local Flags table fall through to the global file; missing keys in the global `flags` object fall through to the built-in default. CLI `--no-skills` MUST override a `flags.skills: true` global; CLI `--no-grill` MUST override a `flags.grill: true` global; CLI `--no-accept-adrs` MUST override a `flags.accept-adrs: true` global.
+Empty/missing rows in the local Flags table fall through to the global file; missing keys in the global `flags` object fall through to the built-in default. CLI `--no-skills` MUST override a `flags.skills: true` global; CLI `--no-grill` MUST override a `flags.grill: true` global; CLI `--no-accept-adrs` MUST override a `flags.accept_adrs: true` global.
 
 When the resolved value of `--skills` is `true`, this skill follows `$BRAINS_PATH/references/skills-detection.md` (probe procedure for hotskills) and `$BRAINS_PATH/references/skills-invocation.md` (query derivation, search/activate/invoke sequence, and the find-skills fallback). The vendored `$BRAINS_PATH/references/find-skills.md` is read only when the fallback fires (lazy-load per ADR-005 req 29).
 
