@@ -73,6 +73,99 @@ After installing, run `/brains:setup --global` to install dependencies and confi
 /brains:setup --without-kroki          # stop and remove the local Kroki container
 ```
 
+## Configuration
+
+BRAINS resolves modes and boolean flags through a 4-layer precedence chain (highest priority first):
+
+1. **Explicit CLI flags** — `/brains:brains --debate --skills` always wins.
+2. **Project overrides** — `.claude/brains.local.md` (auto-loaded by Claude Code as project context).
+3. **Global defaults** — `~/.config/brains/defaults.json` (read by skills via the Read tool).
+4. **Built-in defaults** — hardcoded in each `SKILL.md`. Boolean flags default to `false`.
+
+`--no-*` CLI flags always override a `true` config default. So `flags.skills: true` globally + `--no-skills` on the command line disables skill discovery for that single run.
+
+### Global defaults: `~/.config/brains/defaults.json` (schema v0.3.0)
+
+```json
+{
+  "version": "0.3.0",
+  "defaults": {
+    "brains": "parallel",
+    "map": "parallel",
+    "implement": "parallel",
+    "nurture": "single",
+    "secure": "single"
+  },
+  "debate_rounds": 2,
+  "flags": {
+    "skills": false,
+    "grill": false,
+    "bullets": false,
+    "accept_adrs": false
+  }
+}
+```
+
+The `flags` object (new in v0.3.0) holds per-flag boolean defaults. Each key mirrors a CLI flag:
+
+| Key | CLI override | Effect when `true` |
+|---|---|---|
+| `skills` | `--skills` / `--no-skills` | Skill discovery is enabled by default in `/brains:brains`, `/brains:map`, `/brains:implement`. |
+| `grill` | `--grill` / `--no-grill` | The relentless-interview questionnaire is on by default in `/brains:brains` phase 1. |
+| `bullets` | `--bullets` / `--no-bullets` | `/brains:map` defaults to serial-sweep mode where eligible. |
+| `accept_adrs` | `--accept-adrs` / `--no-accept-adrs` | `--autopilot` auto-accepts ADRs at the gate without prompting. |
+
+### Project overrides: `.claude/brains.local.md`
+
+Markdown file with YAML frontmatter, auto-loaded by Claude Code so all BRAINS skills see it without an explicit Read. Includes a default-modes table and a `## Flags` table for boolean per-project overrides.
+
+```markdown
+---
+type: settings
+plugin: brains
+---
+
+# BRAINS Plugin Settings
+
+## Default Modes
+
+| Skill | Default Mode |
+|-------|:------------:|
+| brains | parallel |
+| map | parallel |
+| implement | parallel |
+| nurture | single |
+| secure | single |
+
+## Debate Rounds
+
+Default number of debate rounds: 2
+
+## Flags
+
+| Flag | Project Default | Notes |
+|---|:---:|---|
+| `skills` |   | Enable skill discovery in brains/map/implement (CLI: `--skills` / `--no-skills`) |
+| `grill` |   | Enable relentless-interview questionnaire in `/brains:brains` phase 1 (CLI: `--grill` / `--no-grill`) |
+| `bullets` |   | Default `/brains:map` to serial-sweep mode (CLI: `--bullets` / `--no-bullets`) |
+| `accept_adrs` |   | Auto-accept ADRs under `--autopilot` (CLI: `--accept-adrs` / `--no-accept-adrs`) |
+```
+
+Empty rows in the Flags table fall through to the global default. Fill in `true` or `false` to opt in/out per project.
+
+### Common configuration patterns
+
+- **Always-on skill discovery globally** — set `flags.skills: true` in `~/.config/brains/defaults.json`. Disable for a single run with `--no-skills`.
+- **Always-on bullets per project** — add `| bullets | true | … |` in the project's `.claude/brains.local.md` `## Flags` table. Force standard multi-phase for a single run with `--no-bullets`.
+- **Always-grill globally** — set `flags.grill: true`. Skip the interview policy for a single run with `--no-grill`.
+- **Hands-off including ADRs by default** — set `flags.accept_adrs: true` globally; combine with `--autopilot` (still required to skip the gate flow itself). Re-introduce HITL on a single run with `--no-accept-adrs`.
+
+### Migration from v0.1.x / v0.2.x
+
+`/brains:setup --global` performs a **non-destructive merge** when it finds a v0.1.x or v0.2.x `defaults.json`: existing values for `version`, `defaults`, `debate_rounds` are preserved; the `flags` object is added (with all keys defaulting to `false`) only if missing; missing individual `flags.*` keys are added with `false` while existing keys are left alone; the `version` field is bumped to `"0.3.0"`. No fields are removed and no user customizations are overwritten.
+
+Full reference: [`skills/setup/references/settings-format.md`](skills/setup/references/settings-format.md).
+
 ## Skills
 
 | Skill | Command | Default Mode | Description |
@@ -105,6 +198,9 @@ Additional flags:
 - `--teammate-model <sonnet|opus|haiku>` *(implement only)* — selects the model used to spawn per-phase teammate Claude Code instances AND their internal subagents (grooming, implementation, nurture, secure). When the orchestrator is Opus and this flag is absent, `/brains:implement` offers *"Spawn teammates using Sonnet to reduce cost? [Y/n]"* (default Y; auto-selected Y under `--autopilot`). Star-chamber invocations are unaffected. Sugar aliases `--teammate-opus`, `--teammate-sonnet`, `--teammate-haiku` are accepted (last one wins). The resolved tier is written into the plan header as `Teammate-model:` and read by `/brains:implement --resume`; a pre-flight summary (mode, autopilot, lean, orchestrator + teammate tier, escalation settings, phase/task counts) is displayed before any teammate is spawned — informational under `--autopilot`, `[Y/n]` confirm in interactive mode.
 - `--no-escalate-on-retry` *(implement only)* — disable escalation-on-retry (which is **on by default** in v0.3). With escalation on, a task that fails twice on the teammate model is retried a third time on the orchestrator model before the `brains:needs-human` label is applied. The default is configurable via `settings.local.json` key `brains.escalateOnRetry` (boolean; default `true`); the CLI flag overrides the setting.
 - `--ignore-model-hints` *(implement only)* — disregard `model-hint: prefer-opus` fields emitted by the grooming subagent. Without this flag, tasks flagged `prefer-opus` escalate to the orchestrator model for their implementation subagent even when a lower teammate tier is the default.
+- `--skills` / `--no-skills` *(brains, map, implement)* — orthogonal modifier that enables skill discovery for the run. Each session (master and every spawned teammate) probes for the [hotskills](https://github.com/anthropics/hotskills) MCP server locally (preferred), falling back to a vendored copy of `find-skills` (`references/find-skills.md`, `npx skills find …`) when hotskills is unavailable. Composes safely with `--autopilot`: `force_whitelist` is never passed, and `npx skills add` is never invoked under autopilot — gate-blocked skills are silently skipped with a log line. Resolved via the 4-layer chain: explicit CLI flag > `.claude/brains.local.md` `## Flags` table > `~/.config/brains/defaults.json` `flags.skills` > built-in `false`. Inherits through phase chaining; the master propagates the flag in the teammate initial prompt, but each teammate probes locally rather than receiving a resolved provider value.
+- `--accept-adrs` / `--no-accept-adrs` *(brains only)* — orthogonal flag that gates the autopilot ADR auto-accept behavior. Default `false`. By itself, `--autopilot` no longer auto-accepts ADRs at the phase-1 gate (preserves human-in-the-loop on architectural commitments — ADRs encode decisions too consequential to skip blindly). To get the previous full hands-off behavior, combine `--autopilot --accept-adrs`. Persisted in the plan header as `Accept-ADRs: true | false` so `/brains:implement --resume` honors the setting. Same 4-layer precedence as `--skills` (`flags.accept_adrs` in `defaults.json`).
+- `--bullets` / `--no-bullets` *(map only)* — orthogonal flag that switches `/brains:map` into "serial sweep mode": a single plan-phase containing 3–6 coarse beads tasks, each with a markdown bullet checklist body, executed inline in the current orchestrator session (no teammate spawn). Auto-detected when (a) the ADR introduces no new external dependencies or services, (b) all work is topologically serial, and (c) no `risk:high` markers or architectural unknowns are surfaced by grooming. `--bullets` forces serial-sweep regardless of auto-detection; `--no-bullets` forces the standard multi-phase shape. Persisted in the plan header as `Bullets: <true | false>`. Same 4-layer precedence (`flags.bullets` in `defaults.json`).
 
 ### Skip-to-implementation shortcut
 
@@ -128,6 +224,10 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 /brains:brains --autopilot --lean "design a caching layer"    # Hands-off + token-efficiency path
 /brains:brains --grill "design a caching layer"               # Relentless-interview phase 1 (8-turn budget)
 /brains:brains --grill --autopilot "design a caching layer"   # Interview thoroughly, then go hands-off
+/brains:brains --skills "add a feature flag system"           # Probe hotskills (or find-skills fallback) for relevant skills
+/brains:brains --autopilot --accept-adrs "small refactor"     # Full hands-off including ADR auto-accept at phase-1 gate
+/brains:map --bullets                                          # Force serial-sweep mode (3-6 coarse tasks, inline execution)
+/brains:brains --grill --autopilot --accept-adrs "complex topic" # Grill thoroughly, then go fully hands-off (ADRs auto-accepted)
 /brains:implement --teammate-sonnet                           # Sugar alias for --teammate-model sonnet
 /brains:implement --teammate-model opus                       # Keep teammates on Opus (no downgrade)
 /brains:implement --no-escalate-on-retry                      # Disable 3rd-retry-on-orchestrator
@@ -138,7 +238,7 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 
 | Phase | Output File | Additional |
 |-------|-------------|------------|
-| brains | `docs/plans/YYYY-MM-DD-<slug>-research.md` | ADRs in `docs/adr/` + auto-generated diagrams in `docs/adr/diagrams/` |
+| brains | `docs/research/YYYY-MM-DD-<slug>-research.md` | ADRs in `docs/adr/` + auto-generated diagrams in `docs/adr/diagrams/` |
 | map | `docs/plans/YYYY-MM-DD-<slug>-map.md` | beads tasks with `brains:` labels |
 | implement | `docs/plans/YYYY-MM-DD-<slug>-phase-N-nurture.md`, `-phase-N-secure.md` per plan-phase | `docs/plans/<slug>-wrap-up.md` (or `-paused.md`) |
 
