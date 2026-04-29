@@ -5,7 +5,7 @@
 > - **Source:** https://raw.githubusercontent.com/vercel-labs/skills/main/skills/find-skills/SKILL.md
 > - **Vendor SHA:** `0b8fb22aaa7f82447d4befe1b6a95d30a5b279b8`
 > - **Vendor date:** 2026-04-28
-> - **Refresh policy:** SHOULD refresh on each BRAINS minor release; nurture MAY file a `bd create` task labelled `brains:nurture:vendored-docs-refresh` if older than 90 days.
+> - **Refresh policy:** SHOULD refresh on each BRAINS minor release; nurture MAY file a `bd create` task labelled `brains:nurture:vendored-docs-refresh` if older than 90 days. A weekly GitHub Action (`.github/workflows/refresh-vendored-find-skills.yml`) auto-opens a refresh PR when upstream SHA drifts.
 > - **Paired with hotskills MCP API surface:** `hotskills.search`, `hotskills.activate`, `hotskills.invoke`, `hotskills.list`, `hotskills.deactivate`, `hotskills.audit` (per hotskills ADR-001). Field names relied on: `gate_status`, `skill_id`, `installs`. If the hotskills tool name `mcp__plugin_hotskills_hotskills__hotskills_search` or any of the above fields is renamed in a hotskills release, BRAINS detection silently falls through to this fallback.
 >
 > The text below is a verbatim copy of the upstream document. BRAINS skills follow these instructions when hotskills is unavailable. **DO NOT EDIT** the body — refresh from upstream instead.

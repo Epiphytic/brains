@@ -8,9 +8,11 @@ This plugin vendors external instruction documents under `references/` so the BR
 
 | File | Upstream | Refresh policy |
 |---|---|---|
-| `references/find-skills.md` | `https://raw.githubusercontent.com/vercel-labs/skills/main/skills/find-skills/SKILL.md` | SHOULD refresh on each BRAINS minor release; nurture MAY file `brains:nurture:vendored-docs-refresh` ticket if older than 90 days |
+| `references/find-skills.md` | `https://raw.githubusercontent.com/vercel-labs/skills/main/skills/find-skills/SKILL.md` | Auto-refreshed weekly by `.github/workflows/refresh-vendored-find-skills.yml` (opens a PR when upstream SHA drifts). Manual refresh SHOULD also happen on each BRAINS minor release; nurture MAY file `brains:nurture:vendored-docs-refresh` ticket if older than 90 days. |
 
-**Refresh procedure:**
+**Automated refresh:** The weekly workflow at `.github/workflows/refresh-vendored-find-skills.yml` runs every Monday 09:00 UTC (and on `workflow_dispatch`). It compares the vendored `Vendor SHA` against the latest upstream commit on `vercel-labs/skills`'s `skills/find-skills/SKILL.md`; on drift it rebuilds the file and opens a PR labelled `vendored-refresh` for review.
+
+**Manual refresh procedure** (if running locally):
 1. `curl -sSL <upstream URL> > /tmp/find-skills-upstream.md`
 2. Get current SHA: `curl -sSL "https://api.github.com/repos/<owner>/<repo>/commits?path=<file>&per_page=1" | jq -r '.[0].sha'`
 3. Replace the body of the vendored file (everything after the maintenance header `---` separator) with the upstream content.
