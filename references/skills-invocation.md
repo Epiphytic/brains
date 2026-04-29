@@ -39,7 +39,7 @@ When detection returned hotskills-unavailable (tool absent or `hotskills.list` t
 
 1. **Verify `npx` is on PATH:** `command -v npx`. If absent, log the literal line `"Skills discovery requires either hotskills (preferred) or Node.js/npx for the find-skills fallback. Install one to use --skills."` and continue without skill discovery for the session. Do NOT attempt any further fallback action.
 2. **Lazy-load the vendored doc:** read `references/find-skills.md` (relative to the BRAINS plugin root) NOW — not earlier. This is the lazy-load that satisfies ADR-005 req 29: the file is touched only when the fallback actually fires. Under `--lean`, the same lazy-load applies.
-3. **Follow the vendored instructions:** invoke `npx skills find <query>` via the Bash tool, parse results per the find-skills doc, and present them to the user (interactive) or log them and continue (autopilot).
+3. **Follow the vendored instructions:** invoke `npx skills find "$QUERY"` via the Bash tool, where `$QUERY` is the derived query string assigned to a shell variable first (e.g., `QUERY="<derived query>"; npx skills find "$QUERY"`). The query MUST be double-quoted as a single shell word to prevent shell metacharacters in task titles or user prompts from being interpreted. Parse results per the find-skills doc and present them to the user (interactive) or log them and continue (autopilot).
 
 ### Verbatim safety contract (autopilot, fallback path)
 
