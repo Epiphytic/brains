@@ -49,6 +49,7 @@ applies-under: --lean
 - `star-chamber-review.md` — star-chamber `review` (code-review) invocation
 - `phase-1-brains.md` — phase-1 `/brains:brains` skill
 - `phase-2-map.md` — phase-2 `/brains:map` skill
+- `document.md` — `/brains:document` abbreviated doc-only spine
 
 ## Drift detection
 
