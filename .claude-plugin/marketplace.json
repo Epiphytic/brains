@@ -8,7 +8,7 @@
     {
       "name": "brains",
       "description": "Brainstorm Research Architect Implement Nurture Secure — a structured multi-LLM development workflow plugin for Claude Code",
-      "version": "0.1.0",
+      "version": "0.6.0",
       "source": "./",
       "author": {
         "name": "Liam Helmer"
