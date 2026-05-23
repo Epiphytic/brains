@@ -4,7 +4,7 @@ Shared git-commit and `.gitignore` procedure for BRAINS phase-completion work. B
 
 When a skill owns phase-completion commit responsibilities, it MUST also:
 
-1. **Ensure code is committed.** Run `git status --porcelain`. If there are uncommitted changes, commit them atomically using conventional-commit messages. Group changes by conceptual unit; do not lump unrelated changes.
+1. **Ensure changes are committed.** Run `git status --porcelain`. If there are uncommitted changes, commit them atomically using conventional-commit messages (document mode uses a `docs:`-prefixed message). Group changes by conceptual unit; do not lump unrelated changes. Fold any `.gitignore` update from step 2 into the same atomic commit when it belongs to the same conceptual unit.
 
 2. **Update `.gitignore`.** Identify files that should not be tracked:
    - Build artifacts (dist/, build/, target/, node_modules/, __pycache__/)

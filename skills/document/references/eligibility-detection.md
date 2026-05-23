@@ -37,26 +37,29 @@ Every other extension is **non-document**, explicitly including:
 
 Classification is **by changed-file extension, not by content**. Fenced or inline code samples appearing *inside* a document (e.g. a ` ```python ` block in a `.md` file) MUST NOT count as code presence — the file is a document because its extension is `.md`.
 
+Classification yields **three** classes — `document`, `code`, and `other-non-document` — because the eligibility and asymmetric-override rules treat them differently: any non-document file blocks auto-eligibility (req 13), but only **code** files drive the manual hard-refuse (req 17). `other-non-document` covers non-code, non-document files such as `.svg`, `.mmd`, `.dsl`, and `.ipynb`.
+
 ```bash
 CHANGED="$({ git diff --name-only; git diff --cached --name-only; git ls-files --others --exclude-standard; } | sort -u)"
 DOC_RE='\.(md|markdown|mdx|rst|txt|adoc)$'
+CODE_RE='\.(py|js|ts|tsx|jsx|go|rs|sh|bash|rb|java|c|cc|cpp|h|hpp|cs|php|swift|kt|scala|lua|sql|pl|r)$'
 DOCS="$(printf '%s\n' "$CHANGED" | grep -E "$DOC_RE" || true)"
 NONDOCS="$(printf '%s\n' "$CHANGED" | grep -vE "$DOC_RE" | sed '/^$/d' || true)"
+CODE="$(printf '%s\n' "$NONDOCS" | grep -E "$CODE_RE" || true)"
 DOC_COUNT="$(printf '%s\n' "$DOCS" | sed '/^$/d' | wc -l | tr -d ' ')"
 NONDOC_COUNT="$(printf '%s\n' "$NONDOCS" | sed '/^$/d' | wc -l | tr -d ' ')"
+CODE_COUNT="$(printf '%s\n' "$CODE" | sed '/^$/d' | wc -l | tr -d ' ')"
 ```
 
-`DOCS` is the candidate target-document set; `NONDOCS` are the code/other files whose presence drives the asymmetric-override rule (§6).
+`DOCS` is the candidate target-document set; `NONDOCS` are all non-document files (any presence blocks auto-eligibility per §6); `CODE` is the code subset of `NONDOCS` (presence drives the manual hard-refuse per §8). The code allow-list above is illustrative, not exhaustive — treat any recognized source-code extension as code.
 
 ## 3. Counting target deliverables only
 
-The `DOC_COUNT` toward the ≤ 4 ceiling MUST count **target deliverable** documents only. It MUST NOT count BRAINS-generated artifacts produced mid-flight:
+The `DOC_COUNT` toward the ≤ 4 ceiling MUST count **target deliverable** documents only. It MUST NOT count BRAINS-generated artifacts the document-mode spine authors mid-flight:
 
 - the slim ADR in `docs/adr/`
-- research notes in `docs/research/`
-- plan / nurture / secure reports in `docs/plans/`
+- the optional orientation note in `docs/research/`
 - beads state under `docs/plans/.state/`
-- rendered diagrams in `docs/adr/diagrams/`
 
 These are outputs of the document-mode spine, not deliverables under review. When recomputing counts after editing (§4), exclude any path the spine itself authored.
 
@@ -104,7 +107,7 @@ If any condition fails, apply the mode-sensitive threshold behavior (§7) or the
 
 ## 7. Mode-sensitive threshold behavior (auto-detected, oversized)
 
-When auto-detection finds document-only work (zero code files) that exceeds the document or dependent ceiling, behavior is mode-sensitive:
+When auto-detection finds document-only work (zero non-document files, per §6 condition 1) that exceeds the document or dependent ceiling, behavior is mode-sensitive:
 
 - **Interactive — warn and ask.** Surface the measured counts (documents N, dependents M, and the relevant ceiling) and offer to either proceed via the full `/brains:brains` pipeline or cancel. Await the user's choice.
 - **`--autopilot` — detect-then-fallback.** Automatically invoke the full `/brains:brains` pipeline. The fallback MUST emit an explicit, **loud notice** stating the measured counts and the reason for falling back, so misclassification is never silently hidden:
@@ -115,7 +118,7 @@ When auto-detection finds document-only work (zero code files) that exceeds the 
 
 Manual `--document-mode` on an ineligible change behaves **asymmetrically**, sorted by the nature of the ineligibility:
 
-- **Oversized but document-only** (zero code files, but documents > 4 or dependents > 10): **warn-and-confirm**. Interactively, surface the counts and confirm once before proceeding into the document-mode spine; under `--autopilot`, fall back to the full pipeline with the loud notice (§7).
-- **Non-document code files present** (`NONDOC_COUNT` > 0): **hard-refuse**. Document mode has no secure pass, so actual code in the change is categorically unsafe here. Refuse and direct the user to the full `/brains:brains` pipeline. State which non-document files triggered the refusal.
+- **Non-document code files present** (`CODE_COUNT` > 0): **hard-refuse**. Document mode has no secure pass, so actual code in the change is categorically unsafe here. Refuse and direct the user to the full `/brains:brains` pipeline. State which code files triggered the refusal. This is the strongest rule; evaluate it first.
+- **Oversized or non-code non-document scope** (`CODE_COUNT` == 0, but documents > 4, dependents > 10, or `other-non-document` files such as `.svg`/`.mmd`/`.dsl`/`.ipynb` are present): **warn-and-confirm**. Interactively, surface the counts and the offending files and confirm once before proceeding into the document-mode spine; under `--autopilot`, fall back to the full pipeline with the loud notice (§7).
 
 Fenced or inline code *inside* a document NEVER triggers the refusal — classification is by changed-file extension (§2), not document content.
