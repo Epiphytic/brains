@@ -12,6 +12,8 @@ applies-under: --lean
 - `references/multi-llm-protocol.md` (lazy-on-demand)
 - `references/beads-integration.md` (full)
   - required for filing follow-up tasks (`brains:phase-<N+1>` or `brains:cleanup`)
+- `references/commit-procedure.md` (full)
+  - loaded under `--scope phase-N` for the shared commit and `.gitignore` procedure
 
 ## Artifacts
 - `docs/adr/*.md` (whole-always)
