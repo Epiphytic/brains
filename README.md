@@ -18,6 +18,8 @@ BRAINS encodes a three-phase methodology for tackling complex software tasks:
 
 Each phase chains into the next via a user-approval gate — or, with `--autopilot`, skips those gates and runs hands-off from phase 1 through phase 3, stopping only on a `brains:needs-human` escalation. The `nurture`, `secure`, and `diagram` skills remain user-invocable for standalone use on any codebase.
 
+For changes that **only edit documents** (prose, not code), `/brains:document` provides an abbreviated fast path that skips planning, teammate orchestration, and the nurture+secure passes — reviewing the final document(s) directly with the star-chamber council instead. It is auto-invoked from phase 1 when a change is document-only and eligible, or requested explicitly via `--document-mode`. See [Document mode](#document-mode).
+
 See [docs/diagrams.md](docs/diagrams.md) for rendered examples of all five diagram types (`flowchart`, `state`, `c4`, `er`, `sequence`) — including the pipeline itself as a flowchart and a C4 context diagram of the plugin's components.
 
 ## Prerequisites
@@ -101,7 +103,8 @@ BRAINS resolves modes and boolean flags through a 4-layer precedence chain (high
     "skills": false,
     "grill": false,
     "bullets": false,
-    "accept_adrs": false
+    "accept_adrs": false,
+    "document_mode": false
   }
 }
 ```
@@ -114,6 +117,7 @@ The `flags` object (new in v0.3.0) holds per-flag boolean defaults. Each key mir
 | `grill` | `--grill` / `--no-grill` | The relentless-interview questionnaire is on by default in `/brains:brains` phase 1. |
 | `bullets` | `--bullets` / `--no-bullets` | `/brains:map` defaults to serial-sweep mode where eligible. |
 | `accept_adrs` | `--accept-adrs` / `--no-accept-adrs` | When combined with `--autopilot`, auto-accepts ADRs at the phase-1 gate without prompting. Has no effect without `--autopilot`. |
+| `document_mode` | `--document-mode` / `--no-document-mode` | `/brains:brains` routes document-only work to the abbreviated `/brains:document` fast path by default. |
 
 ### Project overrides: `.claude/brains.local.md`
 
@@ -149,6 +153,7 @@ Default number of debate rounds: 2
 | `grill` |   | Enable relentless-interview questionnaire in `/brains:brains` phase 1 (CLI: `--grill` / `--no-grill`) |
 | `bullets` |   | Default `/brains:map` to serial-sweep mode (CLI: `--bullets` / `--no-bullets`) |
 | `accept_adrs` |   | Auto-accept ADRs under `--autopilot` (CLI: `--accept-adrs` / `--no-accept-adrs`) |
+| `document_mode` |   | Route document-only work to `/brains:document` (CLI: `--document-mode` / `--no-document-mode`) |
 ```
 
 Empty rows in the Flags table fall through to the global default. Fill in `true` or `false` to opt in/out per project.
@@ -175,6 +180,7 @@ Full reference: [`skills/setup/references/settings-format.md`](skills/setup/refe
 | brains | `/brains:brains` | parallel | Phase 1: research + questionnaire + ADR (with auto-diagram) |
 | map | `/brains:map` | parallel | Phase 2: high-level plan + beads tasks |
 | implement | `/brains:implement` | parallel | Phase 3: teammate-per-plan-phase execution |
+| document | `/brains:document` | parallel | Abbreviated doc-only fast path: eligibility gate → slim ADR → inline edits → direct council review |
 | diagram | `/brains:diagram` | — | Generate architecture diagrams (`flowchart`/`state`/`c4`/`er`/`sequence`) — auto-triggered by `brains:brains` or invoked standalone |
 | nurture | `/brains:nurture` | single | Review and refine (standalone or subagent) |
 | secure | `/brains:secure` | single | Security review (standalone or subagent) |
@@ -201,6 +207,7 @@ Additional flags:
 - `--skills` / `--no-skills` *(brains, map, implement)* — orthogonal modifier that enables skill discovery for the run. Each session (master and every spawned teammate) probes for the [hotskills](https://github.com/anthropics/hotskills) MCP server locally (preferred), falling back to a vendored copy of `find-skills` (`references/find-skills.md`, `npx skills find …`) when hotskills is unavailable. Composes safely with `--autopilot`: `force_whitelist` is never passed, and `npx skills add` is never invoked under autopilot — gate-blocked skills are silently skipped with a log line. Resolved via the 4-layer chain: explicit CLI flag > `.claude/brains.local.md` `## Flags` table > `~/.config/brains/defaults.json` `flags.skills` > built-in `false`. Inherits through phase chaining; the master propagates the flag in the teammate initial prompt, but each teammate probes locally rather than receiving a resolved provider value.
 - `--accept-adrs` / `--no-accept-adrs` *(brains only)* — orthogonal flag that gates the autopilot ADR auto-accept behavior. Default `false`. By itself, `--autopilot` no longer auto-accepts ADRs at the phase-1 gate (preserves human-in-the-loop on architectural commitments — ADRs encode decisions too consequential to skip blindly). To get the previous full hands-off behavior, combine `--autopilot --accept-adrs`. Persisted in the plan header as `Accept-ADRs: true | false` so `/brains:implement --resume` honors the setting. Same 4-layer precedence as `--skills` (`flags.accept_adrs` in `defaults.json`).
 - `--bullets` / `--no-bullets` *(map only)* — orthogonal flag that switches `/brains:map` into "serial sweep mode": a single plan-phase containing 3–6 coarse beads tasks, each with a markdown bullet checklist body, executed inline in the current orchestrator session (no teammate spawn). Auto-detected when (a) the ADR introduces no new external dependencies or services, (b) all work is topologically serial, and (c) no `risk:high` markers or architectural unknowns are surfaced by grooming. `--bullets` forces serial-sweep regardless of auto-detection; `--no-bullets` forces the standard multi-phase shape. Persisted in the plan header as `Bullets: <true | false>`. Same 4-layer precedence (`flags.bullets` in `defaults.json`).
+- `--document-mode` / `--no-document-mode` *(brains only)* — orthogonal flag that routes a document-only change to the abbreviated [`/brains:document`](#document-mode) fast path instead of the full pipeline. At the top of phase 1, `/brains:brains` runs the eligibility probe and delegates to `/brains:document` (forwarding the mode, `--autopilot`, `--lean`, and `--teammate-model`) when EITHER `--document-mode` resolves true OR the change is auto-detected as document-only AND eligible; it does not continue its own pipeline afterward. The flag does **not** propagate to `/brains:map` or `/brains:implement` — once routing occurs there are no downstream phases to receive it. Same 4-layer precedence as `--skills` (explicit CLI flag > `.claude/brains.local.md` `## Flags` table > `~/.config/brains/defaults.json` `flags.document_mode` > built-in `false`).
 
 ### Skip-to-implementation shortcut
 
@@ -209,6 +216,21 @@ At the phase-1 gate, if the synthesized architecture flags *no new external depe
 At the phase-2 gate, if the plan has *fewer than 10 total tasks, all in a single plan-phase, none flagged `risk:high`*, `/brains:map` offers a similar acceptance option to **skip the teammate spawn and implement inline**.
 
 The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens per teammate) for trivial changes where a full teammate spawn is overkill.
+
+## Document mode
+
+`/brains:document` is an abbreviated, document-only fast path for changes that *only* edit prose (markdown and friends, not code). The full pipeline is calibrated for code-bearing architectural work — it plans, spawns a teammate per plan-phase, and closes with code-focused nurture and secure passes. For a change with no code to plan, orchestrate, or scan, that machinery is disproportionate. Document mode strips it down to the essentials.
+
+**The spine** is: **eligibility gate → lightweight research → full 2–4 question questionnaire → slim ADR → inline document edits → direct council review → inline commit.** It skips `/brains:map`, teammate orchestration, `/brains:nurture`, and `/brains:secure` — instead of a separate nurture+secure pass, the **final document(s) are reviewed directly with the star-chamber council** (`uvx star-chamber review` on the document paths, with a 10,000-word-per-document curation gate; under `--single` this degrades to a lower-assurance local self-review). The slim ADR retains Context, Decision, Requirements (RFC 2119), and Consequences and omits the Assumed Versions and Diagram sections; the questionnaire is *not* shortened — document mode keeps the full interactive question range. Document mode owns its own atomic `docs:`-prefixed commit and `.gitignore` updates (the same shared commit procedure nurture uses).
+
+**Eligibility ceiling.** Document mode applies only when the change is genuinely document-only and small: **≤ 4 target documents AND ≤ 10 unique on-disk dependent files** (linked/embedded files resolved from the documents). Classification is by file extension against a versioned allow-list (`.md`, `.markdown`, `.mdx`, `.rst`, `.txt`, `.adoc`) — every other extension (including `.ipynb`, `.svg`, `.mmd`, `.dsl`, and any source-code extension) counts as non-document. The override is **asymmetric**: actual code **files** in the change hard-refuse and direct you to the full pipeline, but fenced or inline example code *inside* a document never trips the refusal (detection is by changed-file extension, not document content).
+
+**How it's reached:**
+
+- **Auto-invoked** at the top of `/brains:brains` phase 1 when the change is auto-detected as document-only AND eligible.
+- **Manually** via `/brains:document "<topic>"`, or via the `--document-mode` flag on `/brains:brains` (resolved through the [4-layer precedence chain](#configuration), like `--skills` and `--bullets`).
+
+**When the scope is over the ceiling, behavior is mode-sensitive:** interactively the system **warns and asks** (it surfaces the measured counts and offers to proceed via the full `/brains:brains` pipeline or cancel); under `--autopilot` it **detects-then-falls-back**, automatically invoking the full pipeline and emitting a loud notice with the measured counts so a misclassification is never silently hidden. Manual `--document-mode` on an oversized-but-document-only scope warns-and-confirms once (interactive) or falls back (autopilot); manual `--document-mode` on a change containing code files hard-refuses.
 
 ```bash
 # Examples
@@ -232,6 +254,8 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 /brains:implement --teammate-model opus                       # Keep teammates on Opus (no downgrade)
 /brains:implement --no-escalate-on-retry                      # Disable 3rd-retry-on-orchestrator
 /brains:diagram "component flow" --type flowchart             # Standalone diagram, attaches to latest ADR
+/brains:document "tighten the API reference wording"          # Doc-only fast path: slim ADR + inline edits + council review
+/brains:brains --document-mode "rewrite the onboarding guide" # Force document-mode delegation from phase 1
 ```
 
 ## Phase Outputs
@@ -324,6 +348,10 @@ brains/
 │   │       ├── sequence.md
 │   │       ├── renderer-conventions.md
 │   │       └── storage-conventions.md
+│   ├── document/               (abbreviated doc-only fast path — eligibility gate + slim ADR + council review)
+│   │   └── references/
+│   │       ├── eligibility-detection.md
+│   │       └── slim-adr-template.md
 │   ├── nurture/
 │   └── secure/
 ├── references/
