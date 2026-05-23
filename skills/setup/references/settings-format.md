@@ -21,7 +21,8 @@ JSON file read by skills at invocation time via the Read tool. Contains system-w
     "skills": false,
     "grill": false,
     "bullets": false,
-    "accept_adrs": false
+    "accept_adrs": false,
+    "document_mode": false
   }
 }
 ```
@@ -33,7 +34,7 @@ JSON file read by skills at invocation time via the Read tool. Contains system-w
 | `version` | string | Plugin version this config was created with |
 | `defaults` | object | Default mode per skill (`single`, `parallel`, or `debate`) |
 | `debate_rounds` | number | Default number of debate rounds when `--rounds` is not specified |
-| `flags` | object | Per-flag boolean defaults. CLI flags (`--skills`, `--grill`, `--bullets`, `--accept-adrs`) and their `--no-*` opposites override these. Missing keys default to `false`. |
+| `flags` | object | Per-flag boolean defaults. CLI flags (`--skills`, `--grill`, `--bullets`, `--accept-adrs`, `--document-mode`) and their `--no-*` opposites override these. Missing keys default to `false`. |
 
 ### `flags` Object
 
@@ -43,6 +44,7 @@ JSON file read by skills at invocation time via the Read tool. Contains system-w
 | `grill` | `--grill` / `--no-grill` | The relentless-interview questionnaire is on by default in `/brains:brains` phase 1. Phase-1 only — does not propagate. |
 | `bullets` | `--bullets` / `--no-bullets` | `/brains:map` defaults to serial-sweep mode (single phase, 3-6 coarse beads tasks, inline execution). Auto-detection still applies — this just biases the default when eligibility is met. |
 | `accept_adrs` | `--accept-adrs` / `--no-accept-adrs` | `--autopilot` auto-accepts ADRs at the gate without prompting. Only consequential when combined with `--autopilot`. |
+| `document_mode` | `--document-mode` / `--no-document-mode` | `/brains:brains` Step 1 delegates to `/brains:document` (the abbreviated doc-only spine) instead of running the full pipeline. Auto-detection of document-only eligible changes still delegates regardless — this just forces delegation when set. |
 
 ### Migration: v0.1.x / v0.2.x → v0.3.0
 
