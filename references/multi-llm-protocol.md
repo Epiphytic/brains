@@ -66,6 +66,11 @@ No star-chamber involvement. The local LLM completes all work independently. Ski
    ```bash
    SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json file1.py file2.py
    ```
+
+   **Document-review variant** (`/brains:document`, per ADR-006 reqs 23-24): when reviewing documents rather than code, pass the **final document(s)** as the `review` targets, and put the original prompt plus main-LLM-curated supporting materials (research and the slim ADR) in `--context-file`. Apply a per-document curation gate by word count — check each target with `wc -w`: a document **under 10,000 words** is passed to the council **in full**; a document **at or above 10,000 words** MUST instead be passed as a main-LLM-curated excerpt plus summary (written to a review-input file) in place of the full file. Build the target list as the under-10,000-word document paths as-is plus the curated excerpt+summary paths substituting for each oversized document:
+   ```bash
+   SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json <under-10000-word doc paths> <curated excerpt+summary paths>
+   ```
 7. **Parse results**: Extract approaches, recommendations, and consensus from JSON
 8. **Present council feedback** to the user
 9. **Integrate**: Revise work based on council feedback (with user approval)
