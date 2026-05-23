@@ -18,7 +18,7 @@ BRAINS encodes a three-phase methodology for tackling complex software tasks:
 
 Each phase chains into the next via a user-approval gate — or, with `--autopilot`, skips those gates and runs hands-off from phase 1 through phase 3, stopping only on a `brains:needs-human` escalation. The `nurture`, `secure`, and `diagram` skills remain user-invocable for standalone use on any codebase.
 
-For changes that **only edit documents** (prose, not code), `/brains:document` provides an abbreviated fast path that skips planning, teammate orchestration, and the nurture+secure passes — reviewing the final document(s) directly with the star-chamber council instead. It is auto-invoked from phase 1 when a change is document-only and eligible, or requested explicitly via `--document-mode`. See [Document mode](#document-mode).
+For changes that **only edit documents** (prose, not code), `/brains:document` provides an abbreviated fast path that skips planning, teammate orchestration, and the nurture+secure passes — reviewing the final document(s) directly with the star-chamber council instead. It is a **terminal alternate route**: it ends after inline edits, council review, and its own commit, and never enters phases 2 (`map`) or 3 (`implement`). It is auto-invoked from phase 1 when a change is document-only and eligible, or requested explicitly via `--document-mode`. See [Document mode](#document-mode).
 
 See [docs/diagrams.md](docs/diagrams.md) for rendered examples of all five diagram types (`flowchart`, `state`, `c4`, `er`, `sequence`) — including the pipeline itself as a flowchart and a C4 context diagram of the plugin's components.
 
@@ -255,7 +255,7 @@ The shortcut saves the per-teammate structural overhead (roughly 7–12k tokens 
 /brains:implement --no-escalate-on-retry                      # Disable 3rd-retry-on-orchestrator
 /brains:diagram "component flow" --type flowchart             # Standalone diagram, attaches to latest ADR
 /brains:document "tighten the API reference wording"          # Doc-only fast path: slim ADR + inline edits + council review
-/brains:brains --document-mode "rewrite the onboarding guide" # Force document-mode delegation from phase 1
+/brains:brains --document-mode "rewrite the onboarding guide" # Request document-mode delegation from phase 1 (when eligible)
 ```
 
 ## Phase Outputs
