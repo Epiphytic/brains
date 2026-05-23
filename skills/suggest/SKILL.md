@@ -54,7 +54,7 @@ Tailor the suggestion to the specific complexity detected. Do not use generic la
 
 - Simple bug fixes with clear root cause
 - Single-file changes with obvious implementation
-- Documentation updates — for document-only work (markdown and prose, not code), point the user at `/brains:document` instead of the full pipeline. It is the abbreviated fast path (eligibility gate → lightweight research → full 2-4 question questionnaire → slim ADR → inline edits → direct council review → inline commit) for changes that touch only documents within the eligibility ceiling (≤ 4 target documents, ≤ 10 on-disk dependents, no code files). Suggest it advisorily; do not auto-invoke.
+- Documentation updates — for document-only work (markdown and prose, not code), point the user at `/brains:document`, the abbreviated doc-only fast path, instead of the full pipeline. It applies to changes within the eligibility ceiling (≤ 4 target documents, ≤ 10 on-disk dependents, no code files); see `/brains:document` for the exact spine. Suggest it advisorily; do not auto-invoke.
 - Configuration changes
 - Tasks the user has explicitly said to "just do"
 - Tasks where BRAINS is already in progress

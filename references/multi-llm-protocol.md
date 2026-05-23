@@ -67,7 +67,7 @@ No star-chamber involvement. The local LLM completes all work independently. Ski
    SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json file1.py file2.py
    ```
 
-   **Document-review variant** (`/brains:document`, per ADR-006 reqs 23-24): when reviewing documents rather than code, pass the **final document(s)** as the `review` targets, and put the original prompt plus main-LLM-curated supporting materials (research and the slim ADR) in `--context-file`. Apply a per-document curation gate by word count — check each target with `wc -w`: a document **under 10,000 words** is passed to the council **in full**; a document **at or above 10,000 words** MUST instead be passed as a main-LLM-curated excerpt plus summary (written to a review-input file) in place of the full file. Build the target list as the under-10,000-word document paths as-is plus the curated excerpt+summary paths substituting for each oversized document:
+   **Document-review variant** (`/brains:document`, per ADR-006 reqs 23-24): when reviewing documents rather than code, pass the **final document(s)** as the `review` targets, and put the original prompt plus main-LLM-curated supporting materials (research and the slim ADR) in `--context-file`. Apply a per-document curation gate by word count — check each target with `wc -w`: a document **under 10,000 words** is passed to the council **in full**; a document **at or above 10,000 words** MUST instead be passed as a main-LLM-curated excerpt plus summary (written to a review-input file) in place of the full file. Write each review-input file under `SC_TMPDIR` with a deterministic name — `<SC_TMPDIR>/<basename>.review-input.md` — holding a brief `## Summary` block followed by a `## Curated excerpt` block. Build the target list as the under-10,000-word document paths as-is plus the curated excerpt+summary paths substituting for each oversized document:
    ```bash
    SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json <under-10000-word doc paths> <curated excerpt+summary paths>
    ```
@@ -110,7 +110,7 @@ For each subsequent round (2 to N):
 Final: Read last round's JSON with Read tool, present results
 ```
 
-For code-focused debate (nurture, secure), substitute `review` for `ask` and pass file paths instead of a question string.
+For code-focused debate (nurture, secure), substitute `review` for `ask` and pass file paths instead of a question string. For **document-focused debate** (`/brains:document --debate`), apply the same document-review variant as parallel mode each round: partition targets by the 10,000-word gate and substitute the curated excerpt+summary review-input files for any oversized document before each `star-chamber review` round.
 
 ### Anonymous Synthesis
 

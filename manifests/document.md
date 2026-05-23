@@ -17,6 +17,7 @@ applies-under: --lean
   - on-demand-trigger: debate-round synthesis, provider error handling, non-standard invocation
 - `references/multi-llm-protocol.md` (lazy-on-demand)
   - on-demand-trigger: compact excerpt is insufficient for the document-review variant (`--parallel` / `--debate`)
+  - this role uses the **document-review variant**: `star-chamber review` on the final document paths with the 10,000-word per-document curation gate (ADR-006 reqs 23-24, 32)
 
 ## Artifacts
 - `docs/adr/2026-05-23-006-brains-document-mode.md` (whole-always)
