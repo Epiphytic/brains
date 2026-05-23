@@ -2,7 +2,7 @@
 name: brains
 description: This skill should be used when the user asks to "run the brains pipeline", "start the brains workflow", "plan and implement from scratch", "do an ADR", "start with brainstorming", or invokes "/brains:brains". Phase 1 of the BRAINS pipeline: interactive research, question generation, questionnaire, architecture synthesis, and ADR production. Supports --single, --parallel (default), and --debate modes, and an optional --autopilot flag that auto-chains into hands-off map + implement. Chains into /brains:map at the user gate.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--accept-adrs] [--lean] [--grill] [--skills|--no-skills] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--accept-adrs] [--lean] [--grill] [--skills|--no-skills] [--document-mode|--no-document-mode] [--rounds N] [--max-diagrams N] [--no-diagram] [--diagram <type>] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, WebFetch, WebSearch, TaskCreate, TaskUpdate
 ---
 
@@ -34,7 +34,7 @@ Do NOT chain into `/brains:map` until an ADR has been written and the user has a
 
 ### 1. Parse arguments and derive topic
 
-Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--accept-adrs` / `--no-accept-adrs`, `--lean`, `--grill`, `--skills` / `--no-skills`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
+Parse `--single` / `--parallel` / `--debate`, `--autopilot`, `--accept-adrs` / `--no-accept-adrs`, `--lean`, `--grill`, `--skills` / `--no-skills`, `--document-mode` / `--no-document-mode`, `--rounds N`, `--max-diagrams N`, `--no-diagram`, `--diagram <type>`, and the topic string. If no topic is provided, ask the user.
 
 **Flag resolution for `--skills`, `--grill`, and `--accept-adrs`** (per ADR-005 reqs 18-19, 34-35): all three are boolean orthogonal flags resolved through a 4-layer precedence chain. For each flag, walk the chain top-to-bottom and stop at the first definitive value:
 
@@ -47,6 +47,15 @@ Empty/missing rows in the local Flags table fall through to the global file; mis
 
 When the resolved value of `--skills` is `true`, this skill follows `$BRAINS_PATH/references/skills-detection.md` (probe procedure for hotskills) and `$BRAINS_PATH/references/skills-invocation.md` (query derivation, search/activate/invoke sequence, and the find-skills fallback). The vendored `$BRAINS_PATH/references/find-skills.md` is read only when the fallback fires (lazy-load per ADR-005 req 29).
 
+**Flag resolution for `--document-mode`** (per ADR-006 req 2, using the same 4-layer precedence chain as ADR-005 reqs 18-19): `--document-mode` is a boolean orthogonal flag. Walk the chain top-to-bottom and stop at the first definitive value:
+
+1. **Explicit CLI flag** — `--document-mode` / `--no-document-mode` on the command line wins.
+2. **`.claude/brains.local.md` Flags table** — a row matching the flag key `document_mode` with `true` or `false` in the "Project Default" column.
+3. **`~/.config/brains/defaults.json` `flags` object** — `flags.document_mode` boolean.
+4. **Built-in default** — `false`.
+
+Empty/missing rows in the local Flags table fall through to the global file; a missing `flags.document_mode` key falls through to the built-in default. CLI `--no-document-mode` MUST override a `flags.document_mode: true` global. The resolved value is consumed by the Step-1 pre-flight delegation guard below. `--document-mode` MUST NOT propagate to `/brains:map` or `/brains:implement` (ADR-006 req 5): once the guard routes to `/brains:document` there are no downstream phases to receive it, and when the guard does not fire the flag has no further effect.
+
 Diagram flag rules: `--no-diagram` suppresses all auto-trigger; `--diagram <type>` forces that type and overrides `--max-diagrams` (valid types: `flowchart`, `state`, `c4`, `er`, `sequence`; error with list of valid types if unknown); `--max-diagrams N` must be 1–5 (error if out of range, default 1). These flags are stored and passed to step 8.
 
 `--autopilot` is an orthogonal flag that composes with any mode. When present, it does not change question-generation, synthesis, or review behavior — those still follow the selected mode. It propagates to downstream phases. By itself, `--autopilot` does NOT auto-accept the ADR gate (per ADR-005 req 33) — the gate is presented normally and awaits user input. To skip the ADR gate as well, combine with `--accept-adrs`.
@@ -56,6 +65,24 @@ Diagram flag rules: `--no-diagram` suppresses all auto-trigger; `--diagram <type
 `--lean` is an orthogonal flag that composes with any mode and with `--autopilot`. When present, activate the token-efficiency path (see `$BRAINS_PATH/manifests/phase-1-brains.md` for the role manifest): use the compact multi-llm-protocol excerpt inline rather than reading the full reference; append a `Research-Summary` block to the plan header at step 2; otherwise behave identically. Default off (byte-identical to prior behavior). `--lean` propagates to downstream phases.
 
 `--grill` is a **strategy modifier** — orthogonal to `--single`, `--parallel`, `--debate`, `--lean`, and `--autopilot`. All combinations are valid. When present, it lifts the 2–4 question cap and applies the relentless-interview questionnaire policy defined in `$BRAINS_PATH/skills/brains/references/grill-protocol.md`. `--grill` applies to phase-1 steps 3 and 5 only; it does NOT propagate to `/brains:map` or `/brains:implement`, and it MUST NOT be forwarded to any chained skill.
+
+#### Document-mode pre-flight delegation guard (per ADR-006 reqs 3-5)
+
+Run this guard at the **top of Step 1, before any research (step 2) or questionnaire work**, immediately after flag resolution above. It is the one place that can route before any phase begins.
+
+1. **Run the eligibility probe.** Follow `$BRAINS_PATH/skills/document/references/eligibility-detection.md`: deterministic bash classifies and counts the canonical changed set (unstaged ∪ staged ∪ untracked-not-ignored) against the versioned document allow-list, and the main LLM resolves in-scope target documents from the prompt for greenfield work. This yields whether the change is **document-only** (zero non-document files) and **eligible** (≤ 4 target documents).
+
+2. **Delegate to `/brains:document`** when EITHER (a) `--document-mode` resolves true, OR (b) the change is auto-detected as document-only AND eligible. Forward the fully resolved mode flag (exactly one of `--single` / `--parallel` / `--debate`, after the precedence chain in step 1 — not "whatever the user typed"), `--autopilot`, and `--lean` verbatim. Invoke directly:
+
+   ```
+   /brains:document <resolved-mode-flag> [--autopilot] [--lean] <topic>
+   ```
+
+   After delegating, **do NOT continue this pipeline** — `/brains:document` owns the entire abbreviated spine (eligibility gate, lightweight research, questionnaire, slim ADR, inline edits, direct council review, inline commit). Do not run steps 2–9 here.
+
+3. **Apply the threshold and asymmetric-override rules from the eligibility-detection reference** when the change is ineligible: interactive **warn-and-ask** / `--autopilot` **detect-then-fallback** with a loud notice for oversized-but-document-only scopes; **hard-refuse** under a manual `--document-mode` override when non-document code files are present (fenced/example code inside a document never triggers refusal). When detection routes to the full pipeline (no delegation, or a fallback), continue with step 2 below.
+
+`--document-mode` is consumed entirely by this guard and the delegated `/brains:document` spine; it is **never** forwarded to `/brains:map` or `/brains:implement` (req 5).
 
 ### 2. Initial research (subagent)
 

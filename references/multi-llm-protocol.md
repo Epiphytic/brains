@@ -66,6 +66,11 @@ No star-chamber involvement. The local LLM completes all work independently. Ski
    ```bash
    SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json file1.py file2.py
    ```
+
+   **Document-review variant** (`/brains:document`, per ADR-006 req 23): when reviewing documents rather than code, pass the **final document(s)** as the `review` targets in full, and put the original prompt plus main-LLM-curated supporting materials (research and the slim ADR) in `--context-file`. Document mode's ≤ 4-document ceiling keeps the payload well within context, so there is no word-count gate:
+   ```bash
+   SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json <final doc paths>
+   ```
 7. **Parse results**: Extract approaches, recommendations, and consensus from JSON
 8. **Present council feedback** to the user
 9. **Integrate**: Revise work based on council feedback (with user approval)
@@ -105,7 +110,7 @@ For each subsequent round (2 to N):
 Final: Read last round's JSON with Read tool, present results
 ```
 
-For code-focused debate (nurture, secure), substitute `review` for `ask` and pass file paths instead of a question string.
+For code-focused debate (nurture, secure), substitute `review` for `ask` and pass file paths instead of a question string. For **document-focused debate** (`/brains:document --debate`), apply the same document-review variant as parallel mode each round: pass the final document(s) in full as the `review` targets.
 
 ### Anonymous Synthesis
 

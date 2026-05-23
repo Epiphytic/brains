@@ -46,6 +46,7 @@ ALLOWED_ROLES=(
   secure
   star-chamber-ask
   star-chamber-review
+  document
 )
 
 is_allowed_role() {
@@ -179,6 +180,7 @@ check_skill_refs "$REPO_ROOT/skills/implement/SKILL.md" master-implement
 check_skill_refs "$REPO_ROOT/skills/implement/teammate.md" teammate
 check_skill_refs "$REPO_ROOT/skills/nurture/SKILL.md" nurture
 check_skill_refs "$REPO_ROOT/skills/secure/SKILL.md" secure
+check_skill_refs "$REPO_ROOT/skills/document/SKILL.md" document
 
 manifest_count="$(find "$MANIFESTS_DIR" -maxdepth 1 -name '*.md' -not -name 'README.md' | wc -l | tr -d ' ')"
 if [[ "$FAILURES" -eq 0 ]]; then

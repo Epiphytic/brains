@@ -251,7 +251,7 @@ mkdir -p ~/.config/brains
    - Set `version` to `"0.3.0"`.
    - Preserve all existing `defaults.*` keys; add any missing skill keys with their built-in defaults (`brains: "parallel"`, `map: "parallel"`, `implement: "parallel"`, `nurture: "single"`, `secure: "single"`).
    - Preserve `debate_rounds` if present; default to `2` if absent.
-   - If `flags` is missing entirely, add `{ "skills": false, "grill": false, "bullets": false, "accept_adrs": false }`.
+   - If `flags` is missing entirely, add `{ "skills": false, "grill": false, "bullets": false, "accept_adrs": false, "document_mode": false }`.
    - If `flags` exists, add only the missing keys (do NOT overwrite existing values for keys already set).
    - Preserve any unknown top-level keys verbatim (forward-compat).
 4. Write the merged result back via the Write tool. NEVER overwrite without merging.
@@ -273,7 +273,8 @@ The full v0.3.0 default (used when no prior file exists):
     "skills": false,
     "grill": false,
     "bullets": false,
-    "accept_adrs": false
+    "accept_adrs": false,
+    "document_mode": false
   }
 }
 ```
@@ -343,6 +344,7 @@ The local settings body MUST include a `## Flags` section with a markdown table 
 | `grill` |   | Enable relentless-interview questionnaire in `/brains:brains` phase 1 (CLI: `--grill` / `--no-grill`) |
 | `bullets` |   | Default `/brains:map` to serial-sweep mode (CLI: `--bullets` / `--no-bullets`) |
 | `accept_adrs` |   | Auto-accept ADRs under `--autopilot` (CLI: `--accept-adrs` / `--no-accept-adrs`) |
+| `document_mode` |   | Force `/brains:brains` to delegate to `/brains:document` (abbreviated doc-only spine) (CLI: `--document-mode` / `--no-document-mode`) |
 ```
 
 Leave the "Project Default" cells empty for skills the project does not override; users fill in `true` or `false` to opt in/out per project.
