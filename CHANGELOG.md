@@ -5,6 +5,21 @@ All notable changes to the BRAINS plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-05-23
+
+### Added
+
+- **Document mode** — an abbreviated, document-only fast path for changes that only edit prose (markdown and friends, not code). Introduced as a new user-invocable skill `/brains:document` (`skills/document/SKILL.md`). The spine is: eligibility gate → lightweight research → full 2–4 question questionnaire → slim ADR → inline document edits → direct council review → inline commit. It skips `/brains:map`, teammate orchestration, `/brains:nurture`, and `/brains:secure`, **reviewing the final document(s) directly with the star-chamber council** (`uvx star-chamber review` on the document paths, with a 10,000-word-per-document curation gate; under `--single` it degrades to a lower-assurance local self-review). The slim ADR retains Context, Decision, Requirements (RFC 2119), and Consequences and omits Assumed Versions and Diagram; the questionnaire is not shortened. Document mode owns its own atomic `docs:`-prefixed commit and `.gitignore` updates via the shared commit procedure that nurture also cites.
+- `--document-mode` / `--no-document-mode` flag for `/brains:brains`. At the top of phase 1, `/brains:brains` runs an eligibility probe and **delegates** to `/brains:document` (forwarding the mode, `--autopilot`, `--lean`, and `--teammate-model`) when EITHER `--document-mode` resolves true OR the change is auto-detected as document-only AND eligible; it does not continue its own pipeline afterward. The flag does not propagate to `/brains:map` or `/brains:implement`. Resolved via the same 4-layer precedence chain as `--skills` (`flags.document_mode` in `~/.config/brains/defaults.json`, default `false`).
+- Hybrid eligibility detection: deterministic bash classifies and counts the canonical changed file set (unstaged ∪ staged ∪ untracked-not-ignored) against a versioned document allow-list (`.md`, `.markdown`, `.mdx`, `.rst`, `.txt`, `.adoc`); the main LLM resolves in-scope documents from the prompt and follows document links, confirming dependents on disk. Eligibility ceiling: ≤ 4 target documents AND ≤ 10 unique on-disk dependent files, with zero non-document files. Over-ceiling behavior is mode-sensitive — warn-and-ask interactively, detect-then-fallback with a loud notice under `--autopilot`. Manual `--document-mode` override is asymmetric: oversized-but-document-only scopes warn-and-confirm, but actual code **files** hard-refuse (fenced/example code inside a document never triggers refusal).
+- `flags.document_mode` boolean (default `false`) in `~/.config/brains/defaults.json`, documented in `skills/setup/references/settings-format.md`, written by `/brains:setup`, and representable as a row in the `.claude/brains.local.md` Flags table.
+- `manifests/document.md` (role `document`) declaring the document skill, its references, and ADR-006 with `whole-always`; `document` added to `ALLOWED_ROLES` in `scripts/manifest-lint.sh`.
+
+### Changed
+
+- `/brains:suggest` refines its "Documentation updates" heuristic to point users toward `/brains:document` for document-only work.
+- `references/multi-llm-protocol.md` documents the document-review variant of `star-chamber review` (full-document context with the 10,000-word curation gate).
+
 ## [0.5.0] - 2026-04-28
 
 ### Breaking Changes
@@ -32,4 +47,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nurture` skill adds a `P1 | Missing docs` priority row alongside missing tests, plus a "Documentation" subsection in the Step-2 completeness review checklist. The Step-5 fix block extends the P1 description from "Missing features/tests" to "Missing features/tests/docs" and includes README/CHANGELOG updates in the fix scope.
 - `teammate.md` T4 block now requires proactive README/CHANGELOG updates in the SAME commit as the code change when implementing tasks that change user-facing behavior or add new options. Docs land with the code, not as trailing cleanup. When no `CHANGELOG.md` exists at the repo root, the teammate files a `bd create` follow-up task instead of creating one unilaterally.
 
+[0.6.0]: https://github.com/Epiphytic/brains/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Epiphytic/brains/releases/tag/v0.5.0
