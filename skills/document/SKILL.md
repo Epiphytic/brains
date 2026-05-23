@@ -2,7 +2,7 @@
 name: document
 description: This skill should be used when the user asks to "document mode", "edit only docs", "just update the docs", "fast-path a doc change", or invokes "/brains:document". Canonical entry point for BRAINS document mode: an abbreviated spine for document-only changes that skips planning, teammate orchestration, nurture, and secure. Runs an eligibility gate, lightweight research, the full 2-4 question questionnaire, a slim ADR, inline document edits, direct star-chamber council review (replacing nurture+secure), and an inline commit. Supports --single, --parallel (default), and --debate modes for the review phase, plus --autopilot and --lean.
 user-invocable: true
-argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [--teammate-model <model>] [topic]"
+argument-hint: "[--single|--parallel|--debate] [--autopilot] [--lean] [topic]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdate
 ---
 
@@ -10,9 +10,7 @@ allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Agent, TaskCreate, TaskUpdat
 
 Drive a document-only change through an eligibility gate, lightweight orientation, the full 2-4 question questionnaire, a slim ADR, inline edits, direct council review, and an inline commit. Document mode is the fast path for work that only edits documents (markdown and prose, not code): it skips `/brains:map`, teammate orchestration, `/brains:nurture`, and `/brains:secure`, reviewing the final document(s) directly with the star-chamber council instead. Default mode: `--parallel` with star-chamber review.
 
-This skill is the **canonical** entry point for document mode. It is invocable directly (`/brains:document "<topic>"`) and is also the delegation target of the `/brains:brains` Step-1 guard (the `--document-mode` flag and auto-detected doc-only path); both routes run this same spine with identical eligibility, gating, and behavior.
-
-`--teammate-model` is accepted only so the delegation from `/brains:brains` can forward its flag set verbatim; document mode never spawns teammate Claude Code instances (req 21), so the flag is inert here unless a future shared helper consumes it.
+This skill is the **canonical** entry point for document mode. It is invocable directly (`/brains:document "<topic>"`) and is also the delegation target of the `/brains:brains` Step-1 guard (the `--document-mode` flag and auto-detected doc-only path); both routes run this same spine with identical eligibility, gating, and behavior. Document mode never spawns teammate Claude Code instances (req 21).
 
 Set the plugin base path:
 
@@ -40,9 +38,9 @@ Do NOT proceed past the eligibility gate (step 1) when the change contains non-d
 
 ### 1. Eligibility gate
 
-Run the hybrid eligibility detection defined in `$BRAINS_PATH/skills/document/references/eligibility-detection.md`: deterministic bash classifies and counts the canonical changed set against the versioned document allow-list (`.md`, `.markdown`, `.mdx`, `.rst`, `.txt`, `.adoc`); the main LLM resolves in-scope target documents from the prompt (greenfield) and extracts/follows document links, confirming dependents with `test -f`.
+Run the hybrid eligibility detection defined in `$BRAINS_PATH/skills/document/references/eligibility-detection.md`: deterministic bash classifies and counts the canonical changed set against the versioned document allow-list (`.md`, `.markdown`, `.mdx`, `.rst`, `.txt`, `.adoc`); the main LLM resolves in-scope target documents from the prompt for greenfield work.
 
-A change is eligible only when it contains zero non-document files AND target documents ≤ 4 AND unique on-disk dependents ≤ 10. Target counts cover deliverables only — never BRAINS-generated artifacts (slim ADR, research, beads, diagrams).
+A change is eligible only when it contains zero non-document files AND target documents ≤ 4. Target counts cover deliverables only — never BRAINS-generated artifacts (slim ADR, research, beads, diagrams).
 
 Apply the mode-sensitive threshold behavior and asymmetric override exactly as the reference specifies: interactive **warn-and-ask** / autopilot **detect-then-fallback** with a loud notice for oversized-but-document-only scopes; **hard-refuse** when non-document code files are present (fenced/example code inside a document never triggers refusal). When detection routes to the full pipeline, stop this spine.
 
@@ -72,27 +70,19 @@ Produce a **slim ADR** in `docs/adr/` following `$BRAINS_PATH/skills/document/re
 
 Edit the target documents inline in the current session. MUST NOT invoke `/brains:map`, spawn teammate Claude Code instances, or invoke `/brains:implement`. SHOULD track work with lightweight beads tasks labeled `brains:document:<slug>`.
 
-After editing, re-run the **full** eligibility probe (per the reference §2–§6) against the now-changed working tree — including non-document-file detection, not just the document count — excluding only the artifacts this spine authored from the target-document count. If editing accidentally introduced a code file or pushed counts over the ceiling, react per the threshold/override rules before proceeding to review and commit.
+After editing, re-run only the cheap changed-set classification (reference §1–§2) against the now-changed working tree to confirm no non-document file was introduced and the target-document count is still ≤ 4 (excluding artifacts this spine authored). If editing accidentally introduced a code file or pushed the document count over the ceiling, react per the threshold/override rules before proceeding to review and commit.
 
 ### 6. Direct council review (replaces nurture + secure)
 
 This step replaces the nurture and secure passes. MUST NOT invoke `/brains:nurture` or `/brains:secure`.
 
-**`--parallel` / `--debate`:** review the final document(s) directly with the star-chamber council. Write a context file holding the original prompt plus main-LLM-curated supporting materials (research and the slim ADR).
-
-First, partition the final documents by word count — a document **under 10,000 words** is passed to the council **in full**; a document **at or above 10,000 words** MUST instead be passed as a main-LLM-curated excerpt plus summary (NOT the full file):
+**`--parallel` / `--debate`:** review the final document(s) directly with the star-chamber council, in full. Write a context file holding the original prompt plus main-LLM-curated supporting materials (research and the slim ADR), then run, in ONE bash command:
 
 ```bash
-wc -w <final doc path>
+SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json <final doc paths>
 ```
 
-For each ≥ 10,000-word document, write its curated excerpt+summary to a review-input file (a BRAINS-generated artifact). Then build the review target list as: the under-10k document paths as-is, plus the curated excerpt+summary paths in place of each oversized document. Run, in ONE bash command:
-
-```bash
-SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json <under-10k doc paths and curated excerpt+summary paths>
-```
-
-Parse the JSON, present the council review to the user, and integrate accepted findings into the source documents (not the excerpts).
+Parse the JSON, present the council review to the user, and integrate accepted findings into the source documents. (Document mode's ≤ 4-document ceiling keeps the review payload well within context; there is no word-count gate.)
 
 **`--single`:** perform a local self-review of the documents in place of the council review. Treat it as explicitly **lower-assurance** and warn the user that council review is unavailable and that `--parallel` is recommended.
 
@@ -118,7 +108,7 @@ After the document-mode spine completes:
 
 ## Additional Resources
 
-- **`$BRAINS_PATH/skills/document/references/eligibility-detection.md`** — hybrid detection: canonical changed set, allow-list, counting, link extraction, threshold and override behavior
+- **`$BRAINS_PATH/skills/document/references/eligibility-detection.md`** — hybrid detection: canonical changed set, allow-list, document counting, threshold and override behavior
 - **`$BRAINS_PATH/skills/document/references/slim-adr-template.md`** — slim ADR template (Context, Decision, Requirements, Consequences)
 - **`$BRAINS_PATH/references/commit-procedure.md`** — shared commit and `.gitignore` procedure
 - **`$BRAINS_PATH/references/multi-llm-protocol.md`** — shared multi-LLM invocation protocol

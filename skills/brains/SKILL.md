@@ -70,9 +70,9 @@ Diagram flag rules: `--no-diagram` suppresses all auto-trigger; `--diagram <type
 
 Run this guard at the **top of Step 1, before any research (step 2) or questionnaire work**, immediately after flag resolution above. It is the one place that can route before any phase begins.
 
-1. **Run the eligibility probe.** Follow `$BRAINS_PATH/skills/document/references/eligibility-detection.md`: deterministic bash classifies and counts the canonical changed set (unstaged ∪ staged ∪ untracked-not-ignored) against the versioned document allow-list, and the main LLM resolves in-scope target documents from the prompt (greenfield) and follows document links with `test -f` confirmation. This yields whether the change is **document-only** (zero non-document files) and **eligible** (≤ 4 target documents AND ≤ 10 unique on-disk dependents).
+1. **Run the eligibility probe.** Follow `$BRAINS_PATH/skills/document/references/eligibility-detection.md`: deterministic bash classifies and counts the canonical changed set (unstaged ∪ staged ∪ untracked-not-ignored) against the versioned document allow-list, and the main LLM resolves in-scope target documents from the prompt for greenfield work. This yields whether the change is **document-only** (zero non-document files) and **eligible** (≤ 4 target documents).
 
-2. **Delegate to `/brains:document`** when EITHER (a) `--document-mode` resolves true, OR (b) the change is auto-detected as document-only AND eligible. Forward the fully resolved mode flag (exactly one of `--single` / `--parallel` / `--debate`, after the precedence chain in step 1 — not "whatever the user typed"), `--autopilot`, and `--lean` verbatim. (`/brains:document` also accepts `--teammate-model` for forward-compatibility, but `/brains:brains` does not parse it, so there is nothing to forward; the flag is inert in document mode per ADR-006 req 21.) Invoke directly:
+2. **Delegate to `/brains:document`** when EITHER (a) `--document-mode` resolves true, OR (b) the change is auto-detected as document-only AND eligible. Forward the fully resolved mode flag (exactly one of `--single` / `--parallel` / `--debate`, after the precedence chain in step 1 — not "whatever the user typed"), `--autopilot`, and `--lean` verbatim. Invoke directly:
 
    ```
    /brains:document <resolved-mode-flag> [--autopilot] [--lean] <topic>
