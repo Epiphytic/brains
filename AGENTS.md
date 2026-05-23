@@ -53,6 +53,34 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Releasing a new version
+
+The plugin version lives in **two** files that MUST be bumped together — they drift easily:
+
+1. `.claude-plugin/plugin.json` → `version`
+2. `.claude-plugin/marketplace.json` → `plugins[0].version` (this is the version the Claude Code marketplace lists/installs)
+
+> ⚠️ `marketplace.json` historically lagged at `0.1.0` while `plugin.json` advanced through 0.2–0.5. Always confirm BOTH read the same version before tagging. A quick check:
+> ```bash
+> grep '"version"' .claude-plugin/plugin.json
+> grep -A2 '"name": "brains"' .claude-plugin/marketplace.json | grep version
+> ```
+
+**Release steps** (run from `main` after the feature PR is merged and CI is green):
+
+```bash
+# 1. Both version fields agree (see above); CHANGELOG has a [X.Y.Z] section + release-link line.
+# 2. Verify the tree:
+bash scripts/manifest-lint.sh            # MUST be OK
+# 3. Annotated tag on the merge commit, then push it:
+git tag -a vX.Y.Z -m "vX.Y.Z — <headline>"
+git push origin vX.Y.Z
+# 4. GitHub release (title matches prior releases: "vX.Y.Z — <headline>"):
+gh release create vX.Y.Z --title "vX.Y.Z — <headline>" --notes "<summary, link the ADR + CHANGELOG>"
+```
+
+The CHANGELOG uses Keep-a-Changelog format with a `[X.Y.Z]:` release-link line at the bottom pointing at `releases/tag/vX.Y.Z`. (A CI check that fails when the two version fields disagree would prevent the recurring drift, if added later.)
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 
