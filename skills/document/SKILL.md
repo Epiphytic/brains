@@ -12,6 +12,8 @@ Drive a document-only change through an eligibility gate, lightweight orientatio
 
 This skill is the **canonical** entry point for document mode. It is invocable directly (`/brains:document "<topic>"`) and is also the delegation target of the `/brains:brains` Step-1 guard (the `--document-mode` flag and auto-detected doc-only path); both routes run this same spine with identical eligibility, gating, and behavior.
 
+`--teammate-model` is accepted only so the delegation from `/brains:brains` can forward its flag set verbatim; document mode never spawns teammate Claude Code instances (req 21), so the flag is inert here unless a future shared helper consumes it.
+
 Set the plugin base path:
 
 ```bash
@@ -54,9 +56,11 @@ If a useful orientation note is produced, write it to `docs/research/YYYY-MM-DD-
 
 Run the full interactive 2-4 question questionnaire, with mode-dependent generation identical to `/brains:brains` steps 3 and 5. Do NOT reduce the question count below the standard 2-4 range — document edits routinely hide product or policy implications that the questionnaire surfaces.
 
-- **`--single`:** spawn a single subagent to generate the 2-4 question set with pros and cons; use its output directly.
-- **`--parallel` (default):** spawn the subagent and concurrently invoke the star-chamber for its own candidate set, then merge and de-duplicate, per `$BRAINS_PATH/references/multi-llm-protocol.md`.
-- **`--debate`:** run subagent and star-chamber across rounds until convergence, per the debate protocol.
+Generation uses the same lightweight question-generation `Agent` subagent as `/brains:brains` — this is NOT a teammate Claude Code instance and does NOT constitute teammate orchestration (which req 21 forbids); it is the same in-session helper the core questionnaire already uses.
+
+- **`--single`:** use a single question-generation subagent to produce the 2-4 question set with pros and cons; use its output directly.
+- **`--parallel` (default):** run the question-generation subagent and concurrently invoke the star-chamber for its own candidate set, then merge and de-duplicate, per `$BRAINS_PATH/references/multi-llm-protocol.md`.
+- **`--debate`:** run the subagent and star-chamber across rounds until convergence, per the debate protocol.
 
 Present each question with pros and cons, accept the user's answer, and adapt the remaining set as new information arrives.
 
@@ -68,25 +72,27 @@ Produce a **slim ADR** in `docs/adr/` following `$BRAINS_PATH/skills/document/re
 
 Edit the target documents inline in the current session. MUST NOT invoke `/brains:map`, spawn teammate Claude Code instances, or invoke `/brains:implement`. SHOULD track work with lightweight beads tasks labeled `brains:document:<slug>`.
 
-After editing, re-validate the eligibility counts (per the reference §4) against the now-changed working tree, excluding any artifact this spine authored.
+After editing, re-run the **full** eligibility probe (per the reference §2–§6) against the now-changed working tree — including non-document-file detection, not just the document count — excluding only the artifacts this spine authored from the target-document count. If editing accidentally introduced a code file or pushed counts over the ceiling, react per the threshold/override rules before proceeding to review and commit.
 
 ### 6. Direct council review (replaces nurture + secure)
 
 This step replaces the nurture and secure passes. MUST NOT invoke `/brains:nurture` or `/brains:secure`.
 
-**`--parallel` / `--debate`:** review the final document(s) directly with the star-chamber council. Write a context file holding the original prompt plus main-LLM-curated supporting materials (research and the slim ADR), then run, in ONE bash command:
+**`--parallel` / `--debate`:** review the final document(s) directly with the star-chamber council. Write a context file holding the original prompt plus main-LLM-curated supporting materials (research and the slim ADR).
 
-```bash
-SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json <final doc paths>
-```
-
-For each reviewed document, check word count with `wc -w`: a document **under 10,000 words** MUST be passed to the council in full; a document **at or above 10,000 words** MUST be passed as a main-LLM-curated excerpt plus summary rather than in full.
+First, partition the final documents by word count — a document **under 10,000 words** is passed to the council **in full**; a document **at or above 10,000 words** MUST instead be passed as a main-LLM-curated excerpt plus summary (NOT the full file):
 
 ```bash
 wc -w <final doc path>
 ```
 
-Parse the JSON, present the council review to the user, and integrate accepted findings into the documents.
+For each ≥ 10,000-word document, write its curated excerpt+summary to a review-input file (a BRAINS-generated artifact). Then build the review target list as: the under-10k document paths as-is, plus the curated excerpt+summary paths in place of each oversized document. Run, in ONE bash command:
+
+```bash
+SC_TMPDIR="<literal path>"; uvx star-chamber review --context-file "$SC_TMPDIR/context.txt" --format json <under-10k doc paths and curated excerpt+summary paths>
+```
+
+Parse the JSON, present the council review to the user, and integrate accepted findings into the source documents (not the excerpts).
 
 **`--single`:** perform a local self-review of the documents in place of the council review. Treat it as explicitly **lower-assurance** and warn the user that council review is unavailable and that `--parallel` is recommended.
 
