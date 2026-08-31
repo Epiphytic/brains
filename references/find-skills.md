@@ -3,13 +3,18 @@
 > **Vendored documentation maintenance**
 >
 > - **Source:** https://raw.githubusercontent.com/vercel-labs/skills/main/skills/find-skills/SKILL.md
-> - **Vendor SHA:** `0b8fb22aaa7f82447d4befe1b6a95d30a5b279b8`
-> - **Vendor date:** 2026-04-28
+> - **Vendor SHA:** `773fb2c7bbf16781670a3520affc4abd0c6151ae`
+> - **Vendor date:** 2026-08-31
 > - **Refresh policy:** SHOULD refresh on each BRAINS minor release; nurture MAY file a `bd create` task labelled `brains:nurture:vendored-docs-refresh` if older than 90 days. A weekly GitHub Action (`.github/workflows/refresh-vendored-find-skills.yml`) auto-opens a refresh PR when upstream SHA drifts.
 > - **Paired with hotskills MCP API surface:** `hotskills.search`, `hotskills.activate`, `hotskills.invoke`, `hotskills.list`, `hotskills.deactivate`, `hotskills.audit` (per hotskills ADR-001). Field names relied on: `gate_status`, `skill_id`, `installs`. If the hotskills tool name `mcp__plugin_hotskills_hotskills__hotskills_search` or any of the above fields is renamed in a hotskills release, BRAINS detection silently falls through to this fallback.
 >
-> The text below is a verbatim copy of the upstream document. BRAINS skills follow these instructions when hotskills is unavailable. **DO NOT EDIT** the body — refresh from upstream instead.
+> The body below is the upstream SKILL.md verbatim. Do not hand-edit; refresh by re-running the workflow or by running it locally and committing the result.
 
+---
+
+---
+name: find-skills
+description: Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
 ---
 
 # Find Skills
@@ -33,9 +38,8 @@ The Skills CLI (`npx skills`) is the package manager for the open agent skills e
 
 **Key commands:**
 
-- `npx skills find [query]` - Search for skills interactively or by keyword
+- `npx skills find [query] [--owner <owner>]` - Search for skills interactively or by keyword, optionally scoped to a GitHub owner
 - `npx skills add <package>` - Install a skill from GitHub or other sources
-- `npx skills check` - Check for skill updates
 - `npx skills update` - Update all installed skills
 
 **Browse skills at:** https://skills.sh/
@@ -63,7 +67,7 @@ For example, top skills for web development include:
 If the leaderboard doesn't cover the user's need, run the find command:
 
 ```bash
-npx skills find [query]
+npx skills find [query] [--owner <owner>]
 ```
 
 For example:
@@ -111,8 +115,6 @@ npx skills add <owner/repo@skill> -g -y
 ```
 
 The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts.
-
-> **BRAINS-specific override (autopilot mode):** Under `--skills --autopilot`, BRAINS MUST NOT auto-install via `npx skills add`. Auto-install is only permitted on the hotskills code path where `gate_status="allow"` provides the security gate. In the find-skills fallback, autopilot logs the recommended install command and continues without installing. This is per ADR-005 req. 14.
 
 ## Common Skill Categories
 
